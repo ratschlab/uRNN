@@ -13,13 +13,23 @@ import argparse, timeit
 
 def generate_data(time_steps, n_data, n_sequence):
     seq = np.random.randint(1, high=9, size=(n_data, n_sequence))
+    # STEPH: the sequence to remember
+    #   uncertain why training examples are now dimension 0, but OK it gets
+    #   transposed at the end... (probably to make concatenating easier?)
     zeros1 = np.zeros((n_data, time_steps-1))
+    # STEPH: T-1 zeros
     zeros2 = np.zeros((n_data, time_steps))
+    # STEPH: T zeros
     marker = 9 * np.ones((n_data, 1))
+    # STEPH: 1 set of 9s ('start reproducing sequence' marker)
     zeros3 = np.zeros((n_data, n_sequence))
+    # STEPH: length-of-sequence set of zeros
 
     x = np.concatenate((seq, zeros1, marker, zeros3), axis=1).astype('int32')
+    # STEPH: the full input is: sequence, T-1 zeros, special marker,
+    #   sequence-length zeros (empty category)
     y = np.concatenate((zeros3, zeros2, seq), axis=1).astype('int32')
+    # STEPH: desired output is: T + length-of-seq sequence zeros, then sequence
     
     return x.T, y.T
 
@@ -58,6 +68,13 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
 
     elif (model == 'complex_RNN'):
         inputs, parameters, costs = complex_RNN(n_input, n_hidden, n_output, input_type=input_type,
+                                                out_every_t=out_every_t, loss_function=loss_function)
+        gradients = T.grad(costs[0], parameters)
+
+    elif (model == 'general_unitary_RNN'):
+        # TODO: (STEPH) write general_unitary_RNN
+        #   note: may want another option specifying the basis of the Lie algebra
+        inputs, parameters, costs = general_unitary_RNN(n_input, n_hidden, n_output, input_type=input_type,
                                                 out_every_t=out_every_t, loss_function=loss_function)
         gradients = T.grad(costs[0], parameters)
 
@@ -112,6 +129,9 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
             s_train_y.set_value(data_y[:,inds])
 
         ce = train(i % num_batches)
+        # STEPH: reporting cross-entropy and not MSE, this time (in theory)
+        #   the loss function isn't actually specified explicitly here, but
+        #   it is presumably cross entropy...
         train_loss.append(ce)
         print "Iteration:", i
         print "cross entropy:", ce

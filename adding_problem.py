@@ -11,6 +11,9 @@ import argparse
 
 
 def generate_data(time_steps, n_data):
+    # STEPH: n_data is n_train or n_test
+    #   time_steps is the length of the sequence, I think
+    #   that is to say, the size of a single training instance
     x = np.asarray(np.zeros((time_steps, int(n_data), 2)),
                    dtype=theano.config.floatX)
 
@@ -21,13 +24,22 @@ def generate_data(time_steps, n_data):
     
     inds = np.asarray(np.random.randint(time_steps/2, size=(n_data, 2)))
     inds[:, 1] += time_steps/2  
+    # STEPH: [:, 0] is from 0 til time_steps/2, [:, 1] is [:, 0] + time_steps/2
+    #   basically, these just pick out which two elements will be added together
     
     for i in range(int(n_data)):
         x[inds[i, 0], i, 1] = 1.0
         x[inds[i, 1], i, 1] = 1.0
+    # STEPH: x[:, :, 1] is 1 in the row of given by the relevant n_data of inds
+    #   x[:, :, 1] is otherwise all 0s
  
     y = (x[:,:,0] * x[:,:,1]).sum(axis=0)
+    # STEPH: before summing, y would be shape: (time_steps, n_data)...
+    #   then we sum over time_steps, so this is just n_data length
     y = np.reshape(y, (n_data, 1))
+    # STEPH: now its shape is (n_data, 1)
+    #   this is: for each example in n_data, it's the sum of two elements from
+    #   the training instance (size time_steps)...
 
     return x, y
 
@@ -69,6 +81,13 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
                                                 out_every_t=out_every_t, loss_function=loss_function)
         gradients = T.grad(costs[0], parameters)
 
+    elif (model == 'general_unitary_RNN'):
+        # TODO: (STEPH) write general_unitary_RNN
+        #   note: may want another option specifying the basis of the Lie algebra
+        inputs, parameters, costs = general_unitary_RNN(n_input, n_hidden, n_output, input_type=input_type,
+                                                out_every_t=out_every_t, loss_function=loss_function)
+        gradients = T.grad(costs[0], parameters)
+
     elif (model == 'IRNN'):
         inputs, parameters, costs = IRNN(n_input, n_hidden, n_output, input_type=input_type,
                                          out_every_t=out_every_t, loss_function=loss_function)
@@ -91,17 +110,23 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     index = T.iscalar('i')
 
     updates, rmsprop = rms_prop(learning_rate, parameters, gradients)
-
+    # STEPH: rms_prop is in optimizations.py
+    
     givens = {inputs[0] : s_train_x[:, n_batch * index : n_batch * (index + 1), :],
               inputs[1] : s_train_y[n_batch * index : n_batch * (index + 1), :]}
-
+    # STEPH: pick out the batch of examples (values in x and labels in y)
+    
     givens_test = {inputs[0] : s_test_x,
                    inputs[1] : s_test_y}
-    
+    # STEPH: the same test regardless of batch
     
     train = theano.function([index], costs[0], givens=givens, updates=updates)
-    
+    # STEPH: given an index, this outputs costs[0], 
+    #   givens are specific substitutions to make in the computation graph
+    #   updates are expressions for new SharedVariable values (parameters)
+
     test = theano.function([], costs[0], givens=givens_test)
+    # STEPH: no updates, here
 
 
     # --- Training Loop ---------------------------------------------------------------
@@ -121,6 +146,8 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
 
 
         mse = train(i % int(num_batches))
+        # STEPH: remember, input of train is the batch number, 
+        #   and output is costs[0]
         train_loss.append(mse)
         print "Iteration:", i
         print "mse:", mse
@@ -128,6 +155,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
 
         if (i % 50==0):
             mse = test()
+            # STEPH: test takes no inputs, as it is a fixed test set
             print
             print "TEST"
             print "mse:", mse
@@ -153,6 +181,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
             cPickle.dump(save_vals,
                          file(savefile, 'wb'),
                          cPickle.HIGHEST_PROTOCOL)
+            # STEPH: HIGHEST_PROTOCOL is highest protocol version available !!!
 
         
 
@@ -173,6 +202,7 @@ if __name__=="__main__":
     
     args = parser.parse_args()
     dict = vars(args)
+    # STEPH: argh bad naming here, dict is a built-in name in python !!
 
     kwargs = {'n_iter': dict['n_iter'],
               'n_batch': dict['n_batch'],

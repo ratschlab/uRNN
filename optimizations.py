@@ -24,6 +24,9 @@ def gradient_descent_momentum(learning_rate, momentum, parameters, gradients):
 
 
 def rms_prop(learning_rate, parameters, gradients):        
+    # STEPH: this is the only function which appears elsewhere, specifically in
+    #   adding_problem.py and memory_problem.py
+    # TODO: (STEPH) review maths for RMSprop
     rmsprop = [theano.shared(1e-3*np.ones_like(p.get_value())) for p in parameters]
     new_rmsprop = [0.9 * vel + 0.1 * (g**2) for vel, g in zip(rmsprop, gradients)]
 

@@ -5,6 +5,7 @@ from fftconv import cufft, cuifft
 
 def initialize_matrix(n_in, n_out, name, rng):
     bin = np.sqrt(6. / (n_in + n_out))
+    # STEPH: again with the built-in names, sadface
     values = np.asarray(rng.uniform(low=-bin,
                                     high=bin,
                                     size=(n_in, n_out)),
@@ -15,6 +16,7 @@ def do_fft(input, n_hidden):
     fft_input = T.reshape(input, (input.shape[0], 2, n_hidden))
     fft_input = fft_input.dimshuffle(0,2,1)
     fft_output = cufft(fft_input) / T.sqrt(n_hidden)
+    # STEPH: see fftconv for cufft
     fft_output = fft_output.dimshuffle(0,2,1)
     output = T.reshape(fft_output, (input.shape[0], 2*n_hidden))
     return output
@@ -29,13 +31,21 @@ def do_ifft(input, n_hidden):
 
 
 def times_diag(input, n_hidden, diag, swap_re_im):
+    # STEPH: built-in names, sadface
     d = T.concatenate([diag, -diag])
+    # STEPH: theano concatenation, minus for reasons yet unknown... something
+    #   possibly to do with phase?
+    #   TODO: resolve this uncertainty
+    #   suspicion: to do with a + ib -> a - ib somehow, since sin(-x) = -sin(x)
     
     Re = T.cos(d).dimshuffle('x',0)
     Im = T.sin(d).dimshuffle('x',0)
+    # STEPH: d is the phase of the complex number, splitting it into real
+    #   and imaginary parts here
 
     input_times_Re = input * Re
     input_times_Im = input * Im
+    # STEPH: np does row-wise multiplication between matrix and vectors
 
     output = input_times_Re + input_times_Im[:, swap_re_im]
    
@@ -75,6 +85,7 @@ def compute_cost_t(lin_output, loss_function, y_t):
     if loss_function == 'CE':
         RNN_output = T.nnet.softmax(lin_output)
         cost_t = T.nnet.categorical_crossentropy(RNN_output, y_t).mean()
+        # TODO: (STEPH) review maths on this
         acc_t =(T.eq(T.argmax(RNN_output, axis=-1), y_t)).mean(dtype=theano.config.floatX)
     elif loss_function == 'MSE':
         cost_t = ((lin_output - y_t)**2).mean()
@@ -84,16 +95,20 @@ def compute_cost_t(lin_output, loss_function, y_t):
 
 
 def initialize_data_nodes(loss_function, input_type, out_every_t):
+    # initialises the theano objects for data and labels
     x = T.tensor3() if input_type == 'real' else T.matrix(dtype='int32')
+    # STEPH: x is either real or ... integers?
     if loss_function == 'CE':
         y = T.matrix(dtype='int32') if out_every_t else T.vector(dtype='int32')
     else:  
+        # STEPH: if not CE, then RSE, btw...
         y = T.tensor3() if out_every_t else T.matrix()
     return x, y        
 
 
 
 def IRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss_function='CE'):
+    # STEPH: this differs from tanhRNN in two places, see below
     np.random.seed(1234)
     rng = np.random.RandomState(1234)
 
@@ -103,6 +118,7 @@ def IRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
     h_0 = theano.shared(np.zeros((1, n_hidden), dtype=theano.config.floatX))
     V = initialize_matrix(n_input, n_hidden, 'V', rng)
     W = theano.shared(np.identity(n_hidden, dtype=theano.config.floatX))
+    # STEPH: W differs from that of tanhRNN: this is just identity!
     out_mat = initialize_matrix(n_hidden, n_output, 'out_mat', rng)
     hidden_bias = theano.shared(np.zeros((n_hidden,), dtype=theano.config.floatX))
     out_bias = theano.shared(np.zeros((n_output,), dtype=theano.config.floatX))
@@ -116,6 +132,7 @@ def IRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
             data_lin_output = T.dot(x_t, V)
         
         h_t = T.nnet.relu(T.dot(h_prev, W) + data_lin_output + hidden_bias.dimshuffle('x', 0))
+        # STEPH: differs from tanhRNN: here we have relu, there they had tanh
         if out_every_t:
             lin_output = T.dot(h_t, out_mat) + out_bias.dimshuffle('x', 0)
             cost_t, acc_t = compute_cost_t(lin_output, loss_function, y_t)
@@ -156,6 +173,8 @@ def IRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
 def tanhRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss_function='CE'):
     np.random.seed(1234)
     rng = np.random.RandomState(1234)
+    # STEPH: initialising np's generic RNG and a specific rng identically
+    #   uncertain why but maybe we'll find out soon
 
     x, y = initialize_data_nodes(loss_function, input_type, out_every_t)
     inputs = [x, y]
@@ -163,46 +182,70 @@ def tanhRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, l
     h_0 = theano.shared(np.zeros((1, n_hidden), dtype=theano.config.floatX))
     V = initialize_matrix(n_input, n_hidden, 'V', rng)
     W = initialize_matrix(n_hidden, n_hidden, 'W', rng)
+    # STEPH: W is the weights of the recurrence (can tell cause of its shape!)
     out_mat = initialize_matrix(n_hidden, n_output, 'out_mat', rng)
     hidden_bias = theano.shared(np.zeros((n_hidden,), dtype=theano.config.floatX))
     out_bias = theano.shared(np.zeros((n_output,), dtype=theano.config.floatX))
     parameters = [h_0, V, W, out_mat, hidden_bias, out_bias]
 
     def recurrence(x_t, y_t, h_prev, cost_prev, acc_prev, V, W, hidden_bias, out_mat, out_bias):
+        # all of this is to get the hidden state, and possibly cost/accuracy
         if loss_function == 'CE':
             data_lin_output = V[x_t]
+            # STEPH: uncertain why this is named thusly
+            # STEPH: in CE case, the data is just an index, I guess...
+            #   basically, an indicator vector
+            #   I think this may be confounded with the experimental setup
+            #   CE appears in ?
         else:
             data_lin_output = T.dot(x_t, V)
+            # STEPH: 'as normal', folding the data from the sequence in
         
         h_t = T.tanh(T.dot(h_prev, W) + data_lin_output + hidden_bias.dimshuffle('x', 0))
+        # STEPH: dimshuffle (theano) here, makes row out of 1d vector, N -> 1xN
         if out_every_t:
             lin_output = T.dot(h_t, out_mat) + out_bias.dimshuffle('x', 0)
             cost_t, acc_t = compute_cost_t(lin_output, loss_function, y_t)
         else:
+            # STEPH: no cost/accuracy until the end!
             cost_t = theano.shared(np.float32(0.0))
             acc_t = theano.shared(np.float32(0.0))
  
         return h_t, cost_t, acc_t 
     
     non_sequences = [V, W, hidden_bias, out_mat, out_bias]
+    # STEPH: naming due to scan (theano); these are 'fixed' values in scan
 
     h_0_batch = T.tile(h_0, [x.shape[1], 1])
+    # STEPH: tile (theano) repeats input x according to pattern
 
     if out_every_t:
         sequences = [x, y]
     else:
+        # STEPH: the 'y' here is just... a bunch of weirdly-shaped zeros?
         sequences = [x, T.tile(theano.shared(np.zeros((1,1), dtype=theano.config.floatX)), [x.shape[0], 1, 1])]
+    # STEPH: sequences here are the input we loop over...
 
     outputs_info = [h_0_batch, theano.shared(np.float32(0.0)), theano.shared(np.float32(0.0))]
+    # STEPH: naming due to scan, these are initialisation values... see return
+    # value of recurrence: h_t, cost_t, acc_t...
         
     [hidden_states, cost_steps, acc_steps], updates = theano.scan(fn=recurrence,
                                                                   sequences=sequences,
                                                                   non_sequences=non_sequences,
                                                                   outputs_info=outputs_info)
+    # STEPH: remembering how to do scan!
+    #   outputs_info: contains initialisation, naming is bizarre, whatever
+    #   non_sequences: unchanging variables
+    #   sequences: tensors to be looped over
+    #   so fn receives (sequences, previous output, non_sequences):
+    #       this seems to square with the order of arguments in 'recurrence'
+    #       TODO: read scan more carefully to confirm this
    
     if not out_every_t:
         lin_output = T.dot(hidden_states[-1,:,:], out_mat) + out_bias.dimshuffle('x', 0)
         costs = compute_cost_t(lin_output, loss_function, y)
+        # STEPH: cost is computed off the final hidden state
     else:
         cost = cost_steps.mean()
         accuracy = acc_steps.mean()
@@ -216,6 +259,7 @@ def LSTM(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
     np.random.seed(1234)
     rng = np.random.RandomState(1234)
 
+    # STEPH: i for input, f for forget, c for candidate, o for output
     W_i = initialize_matrix(n_input, n_hidden, 'W_i', rng)
     W_f = initialize_matrix(n_input, n_hidden, 'W_f', rng)
     W_c = initialize_matrix(n_input, n_hidden, 'W_c', rng)
@@ -224,6 +268,7 @@ def LSTM(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
     U_f = initialize_matrix(n_hidden, n_hidden, 'U_f', rng)
     U_c = initialize_matrix(n_hidden, n_hidden, 'U_c', rng)
     U_o = initialize_matrix(n_hidden, n_hidden, 'U_o', rng)
+    # STEPH: note that U is not out_mat as it was in complex_RNN
     V_o = initialize_matrix(n_hidden, n_hidden, 'V_o', rng)
     b_i = theano.shared(np.zeros((n_hidden,), dtype=theano.config.floatX))
     b_f = theano.shared(np.ones((n_hidden,), dtype=theano.config.floatX))
@@ -252,15 +297,20 @@ def LSTM(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
             x_t_W_o = T.dot(x_t, W_o)
             
         input_t = T.nnet.sigmoid(x_t_W_i + T.dot(h_prev, U_i) + b_i.dimshuffle('x', 0))
+        # STEPH: save candidate?
         candidate_t = T.tanh(x_t_W_c + T.dot(h_prev, U_c) + b_c.dimshuffle('x', 0))
         forget_t = T.nnet.sigmoid(x_t_W_f + T.dot(h_prev, U_f) + b_f.dimshuffle('x', 0))
+        # STEPH: forget previosu state?
 
         state_t = input_t * candidate_t + forget_t * state_prev
+        # STEPH: so we can both save the input and not forget the previous, OK
 
         output_t = T.nnet.sigmoid(x_t_W_o + T.dot(h_prev, U_o) + T.dot(state_t, V_o) + b_o.dimshuffle('x', 0))
+        # TODO: (STEPH) double-check maths, here!
 
         h_t = output_t * T.tanh(state_t)
 
+        # STEPH: same  as other models...
         if out_every_t:
             lin_output = T.dot(h_t, out_mat) + out_bias.dimshuffle('x', 0)
             cost_t, acc_t = compute_cost_t(lin_output, loss_function, y_t)
@@ -271,7 +321,8 @@ def LSTM(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss
         return h_t, state_t, cost_t, acc_t
 
     non_sequences = [W_i, W_f, W_c, W_o, U_i, U_f, U_c, U_o, V_o, b_i, b_f, b_c, b_o, out_mat, out_bias]
-
+    
+    # STEPH: same as tanhRNN, etc... the scan part is generally duplicated!
     h_0_batch = T.tile(h_0, [x.shape[1], 1])
     state_0_batch = T.tile(state_0, [x.shape[1], 1])
     
@@ -306,40 +357,46 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
     # Initialize parameters: theta, V_re, V_im, hidden_bias, U, out_bias, h_0
     V = initialize_matrix(n_input, 2*n_hidden, 'V', rng)
     U = initialize_matrix(2 * n_hidden, n_output, 'U', rng)
+    # STEPH: U was previously known as out_mat
     hidden_bias = theano.shared(np.asarray(rng.uniform(low=-0.01,
                                                        high=0.01,
                                                        size=(n_hidden,)),
                                            dtype=theano.config.floatX), 
                                 name='hidden_bias')
-    
+    # STEPH: hidden bias is simply initialised differently in this case 
     reflection = initialize_matrix(2, 2*n_hidden, 'reflection', rng)
+    # STEPH: part of recurrence (~W)
     out_bias = theano.shared(np.zeros((n_output,), dtype=theano.config.floatX), name='out_bias')
     theta = theano.shared(np.asarray(rng.uniform(low=-np.pi,
                                                  high=np.pi,
                                                  size=(3, n_hidden)),
                                      dtype=theano.config.floatX), 
                                 name='theta')
-
+    # STEPH: theta is used in recurrence several times (~W)
     bucket = np.sqrt(3. / 2 / n_hidden) 
     h_0 = theano.shared(np.asarray(rng.uniform(low=-bucket,
                                                high=bucket,
                                                size=(1, 2 * n_hidden)), 
                                    dtype=theano.config.floatX),
                         name='h_0')
-    
+    # STEPH: special way of initialising hidden state
     parameters = [V, U, hidden_bias, reflection, out_bias, theta, h_0]
 
     x, y = initialize_data_nodes(loss_function, input_type, out_every_t)
     
     index_permute = np.random.permutation(n_hidden)
+    # STEPH: permutation used in recurrence (~W)
 
     index_permute_long = np.concatenate((index_permute, index_permute + n_hidden))
+    # STEPH: do the same permutation to both real and imaginary parts
     swap_re_im = np.concatenate((np.arange(n_hidden, 2*n_hidden), np.arange(n_hidden)))
+    # STEPH: this is a permutation which swaps imaginary and real indices
     
     # define the recurrence used by theano.scan
     def recurrence(x_t, y_t, h_prev, cost_prev, acc_prev, theta, V, hidden_bias, out_bias, U):  
 
         # Compute hidden linear transform
+        # STEPH: specific set of transformations, sliiightly not that important
         step1 = times_diag(h_prev, n_hidden, theta[0,:], swap_re_im)
         step2 = do_fft(step1, n_hidden)
         step3 = times_reflection(step2, n_hidden, reflection[0,:])
@@ -350,6 +407,8 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
         step8 = times_diag(step7, n_hidden, theta[2,:], swap_re_im)     
         
         hidden_lin_output = step8
+        # STEPH: hidden_lin_output isn't complex enough to have its own name
+        #   in the other models
         
         # Compute data linear transform
         if loss_function == 'CE':
@@ -365,6 +424,8 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
 
         # scale RELU nonlinearity
         modulus = T.sqrt(lin_output**2 + lin_output[:, swap_re_im]**2)
+        # STEPH: I think this comes to twice the modulus...
+        #   TODO: check that
         rescale = T.maximum(modulus + T.tile(hidden_bias, [2]).dimshuffle('x', 0), 0.) / (modulus + 1e-5)
         h_t = lin_output * rescale
         
@@ -378,6 +439,7 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
         return h_t, cost_t, acc_t
 
     # compute hidden states
+    # STEPH: the same as in tanhRNN, here (except U ~ out_mat)
     h_0_batch = T.tile(h_0, [x.shape[1], 1])
     non_sequences = [theta, V, hidden_bias, out_bias, U]
     if out_every_t:
@@ -401,9 +463,6 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
         costs = [cost, accuracy]
 
     return [x, y], parameters, costs
-
-
-
-
- 
-
+    # STEPH: note that tanhRNN and IRNN return 'inputs' (= [x, y]), whereas
+    #   complex_RNN and LSTM return [x, y]... I think this should not matter
+    #   as x and y are (in theory) unchanged, but I'm still making a note of it.
