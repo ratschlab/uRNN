@@ -216,9 +216,7 @@ def tanhRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, l
     non_sequences = [V, W, hidden_bias, out_mat, out_bias]
     # STEPH: naming due to scan (theano); these are 'fixed' values in scan
 
-    # YOLO
-    #h_0_batch = T.tile(h_0, [x.shape[1], 1])
-    h_0_batch = T.tile(h_0, [5, 1])
+    h_0_batch = T.tile(h_0, [x.shape[1], 1])
     # STEPH: tile (theano) repeats input x according to pattern
     #   pattern is number of times to tile in each direction
 
