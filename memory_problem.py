@@ -108,7 +108,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
                    inputs[1] : s_test_y}
     
    
-    
+   
     train = theano.function([index], costs[0], givens=givens, updates=updates)
     test = theano.function([], [costs[0], costs[1]], givens=givens_test)
 
@@ -195,4 +195,19 @@ if __name__=="__main__":
               'out_every_t': 'True'==dict['out_every_t'],
               'loss_function': dict['loss_function']}
 
-    main(**kwargs)
+    # STEPH: since this is _memory problem_, only some settings are allowed!
+    # ( I could probably enforce this during parsing, too )
+    ERR = False
+    if not kwargs['loss_function'] == 'CE':
+        print 'loss function must be CE'
+        ERR = True
+    if not kwargs['input_type'] == 'categorical':
+        print 'input_type must be categorical'
+        ERR = True
+    if not kwargs['out_every_t'] == True:
+        print 'out_every_t must be True'
+        ERR = True
+    if ERR:
+        sys.exit('Arguments failed checks, quitting.')
+    else:
+        main(**kwargs)

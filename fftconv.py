@@ -10,6 +10,12 @@ from theano.ifelse import ifelse
 if cuda_available:
     from theano.sandbox.cuda import (basic_ops, CudaNdarrayType,
                                      CudaNdarray)
+    # STEPH: it really looks like basic_ops is REQUIRED here...
+else:
+    print '(fftconv.py) ERROR: CUDA required.'
+    sys.exit()
+# ENDSTEPH: tiny plaster on the wound
+
 from theano.misc.pycuda_init import pycuda_available
 if pycuda_available:
     import pycuda.gpuarray
