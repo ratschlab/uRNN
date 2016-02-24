@@ -214,5 +214,17 @@ if __name__=="__main__":
               'input_type': dict['input_type'],              
               'out_every_t': 'True'==dict['out_every_t'],
               'loss_function': dict['loss_function']}
-
-    main(**kwargs)
+    
+    # STEPH:
+    # # force sanity on the arguments
+    ERR = False
+    if not kwargs['loss_function'] == 'MSE':
+        print 'loss function must be MSE'
+        ERR = True
+    if not kwargs['input_type'] == 'real':
+        print 'input_type must be real'
+        ERR = True
+    if ERR:
+        sys.exit('Arguments failed checks, quitting.')
+    else:
+        main(**kwargs)

@@ -200,7 +200,7 @@ def tanhRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, l
         else:
             data_lin_output = T.dot(x_t, V)
             # STEPH: 'as normal', folding the data from the sequence in
-        
+   
         h_t = T.tanh(T.dot(h_prev, W) + data_lin_output + hidden_bias.dimshuffle('x', 0))
         # STEPH: dimshuffle (theano) here, makes row out of 1d vector, N -> 1xN
         if out_every_t:
@@ -210,7 +210,7 @@ def tanhRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, l
             # STEPH: no cost/accuracy until the end!
             cost_t = theano.shared(np.float32(0.0))
             acc_t = theano.shared(np.float32(0.0))
- 
+
         return h_t, cost_t, acc_t 
     
     non_sequences = [V, W, hidden_bias, out_mat, out_bias]
@@ -230,7 +230,7 @@ def tanhRNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, l
     outputs_info = [h_0_batch, theano.shared(np.float32(0.0)), theano.shared(np.float32(0.0))]
     # STEPH: naming due to scan, these are initialisation values... see return
     # value of recurrence: h_t, cost_t, acc_t...
-        
+    
     [hidden_states, cost_steps, acc_steps], updates = theano.scan(fn=recurrence,
                                                                   sequences=sequences,
                                                                   non_sequences=non_sequences,
