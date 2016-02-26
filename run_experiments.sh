@@ -13,11 +13,7 @@ learning_rate=0.001
 
 # === the functions (bitta boilerplate)
 run_memory () {
-    #time_steps_set=( 100 200 300 500 )
-    # temporarily hacking for the purpose of memory_RNN_500!
-    # time_steps_set=( 500 )
-    # dehacked!
-    time_steps_set=( 100 200 300 )
+    time_steps_set=( 100 200 300 500 )
     input_type="categorical"
     out_every_t="True"
     loss_function="CE"
@@ -33,7 +29,11 @@ run_memory () {
 }
 
 run_adding () {
-    time_steps_set=( 100 200 400 750 )
+    # temporarily hacked for LSTM
+    #time_steps_set=( 100 200 400 750 )
+    # YOLO
+    time_steps_set=( 400 750 )
+    # DEYOLO
     input_type="real"
     out_every_t="False"
     loss_function="MSE"
@@ -59,14 +59,13 @@ case $model in
     "IRNN")
         echo "IRNN"
         run_memory 80 "IRNN"
-        # IRNN is done with adding!
-#        run_adding 128 "IRNN"
+        run_adding 128 "IRNN"
         ;;
     "LSTM")
         echo "LSTM"
-        run_memory 40 "LSTM"
-        # LSTM is queued with adding...
-#        run_adding 128 "LSTM"
+#        run_memory 40 "LSTM"
+        # LSTM is done with memory
+        run_adding 128 "LSTM"
         ;;
     "complex_RNN")
         echo "complex_RNN"
