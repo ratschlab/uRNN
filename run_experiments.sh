@@ -15,7 +15,9 @@ learning_rate=0.001
 run_memory () {
     #time_steps_set=( 100 200 300 500 )
     # temporarily hacking for the purpose of memory_RNN_500!
-    time_steps_set=( 500 )
+    # time_steps_set=( 500 )
+    # dehacked!
+    time_steps_set=( 100 200 300 )
     input_type="categorical"
     out_every_t="True"
     loss_function="CE"
@@ -57,12 +59,14 @@ case $model in
     "IRNN")
         echo "IRNN"
         run_memory 80 "IRNN"
-        run_adding 128 "IRNN"
+        # IRNN is done with adding!
+#        run_adding 128 "IRNN"
         ;;
     "LSTM")
         echo "LSTM"
         run_memory 40 "LSTM"
-        run_adding 128 "LSTM"
+        # LSTM is queued with adding...
+#        run_adding 128 "LSTM"
         ;;
     "complex_RNN")
         echo "complex_RNN"
