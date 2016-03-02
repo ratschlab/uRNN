@@ -21,6 +21,8 @@ elif task == 'memory':
 else:
     sys.exit('Unknown task', task)
 plot_test = sys.argv[3] == 'test'
+plot_fname = task+'_'+str(T)+'_'+(plot_test*'test' + (1-plot_test)*'train') + '.png'
+print plot_fname
 
 # constants etc.
 #   we get train loss after every iteration
@@ -50,6 +52,8 @@ if plot_test:
     loss = 'test_loss'
 else:
     loss = 'train_loss'
+
+# determine y/x min/max
 xmax = 0
 ymax = -1000
 ymin = 1000
@@ -66,6 +70,7 @@ for (model, trace) in traces.iteritems():
 
 print 0, xmax
 print ymin, ymax
+# fix it anyway, ok
 ymax = 1.0
 ymin = -0.001
 
@@ -76,8 +81,10 @@ for model in traces.keys():
     series_x = 20*np.arange(len(traces[model][loss]))
     series_y = np.array(traces[model][loss])
     colour = colours[model]
-    data_series[model], = plt.plot(series_x, series_y, colour, label=model, alpha=0.6)
+    data_series[model], = plt.plot(series_x, series_y, colour, label=model, alpha=0.8)
 plt.xlabel("training examples")
 plt.ylabel(score)
 plt.legend(loc='upper right')
 plt.title(loss)
+# now save ok
+plt.savefig(plot_fname)
