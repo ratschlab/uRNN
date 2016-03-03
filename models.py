@@ -469,11 +469,14 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
     #   as x and y are (in theory) unchanged, but I'm still making a note of it.
     #
 
-def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss_function='CE'):
+def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss_function='CE', basis=None):
     # STEPH: hey, it's mine! so much boilerplate!
     #   of code: this is derived from complex_RNN!
     np.random.seed(1234)
     rng = np.random.RandomState(1234)
+    
+    x, y = initialize_data_nodes(loss_function, input_type, out_every_t)
+    inputs = [x, y]
 
     # TODO: all from here (requires some engineering thoughts)
     # encoder
@@ -483,7 +486,20 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
     out_bias = theano.shared(np.zeros((n_output,), dtype=theano.config.floatX), name='out_bias')
     # hidden part
     # TODO: how to initialise lambdas?
-    #lambdas = theano.shared(np.asarray(rng.uniform()))
+    lambdas = theano.shared(np.asarray(rng.uniform(low=-1,
+                                                   high=1,
+                                                   size=(n_hidden*(n_hidden-1)/2,)),
+                                       dtype=theano.config.floatX),
+                            name='lambdas')
+    if basis is None:
+        symbolic_basis = theano.shared(np.asarray(rng.normal(size=(n_hidden*(n_hidden-1)/2, 
+                                                                   n_hidden,
+                                                                   n_hidden)),
+                                                  dtype=theano.config.floatX),
+                                       name='symbolic_basis')
+    else:
+        symbolic_basis = theano.shared(basis, name='symbolic_basis')
+    O = T.exp(T.dot(lambdas, symbolic_basis))
     # TODO: check maths on bucket
     bucket = np.sqrt(3. / 2 / n_hidden) 
     h_0 = theano.shared(np.asarray(rng.uniform(low=-bucket,
@@ -496,66 +512,20 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
                                                        size=(n_hidden,)),
                                            dtype=theano.config.floatX), 
                                 name='hidden_bias')
-    # TODO TODO TODO
-    # STEPH: hidden bias is simply initialised differently in this case 
-    reflection = initialize_matrix(2, 2*n_hidden, 'reflection', rng)
-    # STEPH: part of recurrence (~W)
-    theta = theano.shared(np.asarray(rng.uniform(low=-np.pi,
-                                                 high=np.pi,
-                                                 size=(3, n_hidden)),
-                                     dtype=theano.config.floatX), 
-                                name='theta')
-    # STEPH: theta is used in recurrence several times (~W)
-    # STEPH: special way of initialising hidden state
-    parameters = [V, U, hidden_bias, reflection, out_bias, theta, h_0]
+   
+    # all the parameters!
+    parameters = [V, U, out_bias, lambdas, h_0, hidden_bias]
 
-    x, y = initialize_data_nodes(loss_function, input_type, out_every_t)
-    
-    index_permute = np.random.permutation(n_hidden)
-    # STEPH: permutation used in recurrence (~W)
-
-    index_permute_long = np.concatenate((index_permute, index_permute + n_hidden))
-    # STEPH: do the same permutation to both real and imaginary parts
-    swap_re_im = np.concatenate((np.arange(n_hidden, 2*n_hidden), np.arange(n_hidden)))
-    # STEPH: this is a permutation which swaps imaginary and real indices
-    
     # define the recurrence used by theano.scan
-    def recurrence(x_t, y_t, h_prev, cost_prev, acc_prev, theta, V, hidden_bias, out_bias, U):  
-
-        # Compute hidden linear transform
-        # STEPH: specific set of transformations, sliiightly not that important
-        step1 = times_diag(h_prev, n_hidden, theta[0,:], swap_re_im)
-        step2 = do_fft(step1, n_hidden)
-        step3 = times_reflection(step2, n_hidden, reflection[0,:])
-        step4 = vec_permutation(step3, index_permute_long)
-        step5 = times_diag(step4, n_hidden, theta[1,:], swap_re_im)
-        step6 = do_ifft(step5, n_hidden)
-        step7 = times_reflection(step6, n_hidden, reflection[1,:])
-        step8 = times_diag(step7, n_hidden, theta[2,:], swap_re_im)     
-        
-        hidden_lin_output = step8
-        # STEPH: hidden_lin_output isn't complex enough to have its own name
-        #   in the other models
-        
-        # Compute data linear transform
+    def recurrence(x_t, y_t, h_prev, cost_prev, acc_prev, V, O, hidden_bias, out_bias, U):  
         if loss_function == 'CE':
+            # STEPH: why is this cast here???
             data_lin_output = V[T.cast(x_t, 'int32')]
         else:
             data_lin_output = T.dot(x_t, V)
-            
-        # Total linear output        
-        lin_output = hidden_lin_output + data_lin_output
 
+        h_t = T.nnet.relu(T.dot(O, h_prev) + data_lin_output + hidden_bias.dimshuffle('x', 0))
 
-        # Apply non-linearity ----------------------------
-
-        # scale RELU nonlinearity
-        modulus = T.sqrt(lin_output**2 + lin_output[:, swap_re_im]**2)
-        # STEPH: I think this comes to twice the modulus...
-        #   TODO: check that
-        rescale = T.maximum(modulus + T.tile(hidden_bias, [2]).dimshuffle('x', 0), 0.) / (modulus + 1e-5)
-        h_t = lin_output * rescale
-        
         if out_every_t:
             lin_output = T.dot(h_t, U) + out_bias.dimshuffle('x', 0)
             cost_t, acc_t = compute_cost_t(lin_output, loss_function, y_t)
@@ -589,10 +559,7 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
         accuracy = acc_steps.mean()
         costs = [cost, accuracy]
 
-    return [x, y], parameters, costs
-    # STEPH: note that tanhRNN and IRNN return 'inputs' (= [x, y]), whereas
-    #   complex_RNN and LSTM return [x, y]... I think this should not matter
-    #   as x and y are (in theory) unchanged, but I'm still making a note of it.
+    return inputs, parameters, costs
  
 def general_unitary_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss_function='CE'):
     # STEPH: hey, it's mine! copying proclivity towards boilerplate from rest
