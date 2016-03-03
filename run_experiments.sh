@@ -29,11 +29,7 @@ run_memory () {
 }
 
 run_adding () {
-    # temporarily hacked for LSTM
-    #time_steps_set=( 100 200 400 750 )
-    # YOLO
-    time_steps_set=( 400 750 )
-    # DEYOLO
+    time_steps_set=( 100 200 400 750 )
     input_type="real"
     out_every_t="False"
     loss_function="MSE"
@@ -63,8 +59,7 @@ case $model in
         ;;
     "LSTM")
         echo "LSTM"
-#        run_memory 40 "LSTM"
-        # LSTM is done with memory
+        run_memory 40 "LSTM"
         run_adding 128 "LSTM"
         ;;
     "complex_RNN")
