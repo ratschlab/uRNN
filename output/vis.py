@@ -21,7 +21,13 @@ elif task == 'memory':
 else:
     sys.exit('Unknown task', task)
 plot_test = sys.argv[3] == 'test'
-plot_fname = task+'_'+str(T)+'_'+(plot_test*'test' + (1-plot_test)*'train') + '.png'
+if plot_test:
+    scaling_factor = 1000
+    plot_fname = task+'_'+str(T)+'_test.png'
+else:
+    scaling_factor = 20
+    plot_fname = task+'_'+str(T)+'_train.png'
+
 print plot_fname
 
 # constants etc.
@@ -58,7 +64,7 @@ xmax = 0
 ymax = -1000
 ymin = 1000
 for (model, trace) in traces.iteritems():
-    n_train = 20*len(trace[loss])
+    n_train = len(trace[loss])
     if n_train > xmax:
         xmax = n_train
     train_max = np.nanmax(trace[loss])
@@ -68,6 +74,7 @@ for (model, trace) in traces.iteritems():
     if train_min < ymin:
         ymin = train_min
 
+xmax = scaling_factor*xmax
 print 0, xmax
 print ymin, ymax
 # fix it anyway, ok
@@ -78,7 +85,7 @@ plt.axis([0, xmax, ymin, ymax])
 # construct the arguments to plot
 data_series = dict()
 for model in traces.keys():
-    series_x = 20*np.arange(len(traces[model][loss]))
+    series_x = scaling_factor*np.arange(len(traces[model][loss]))
     series_y = np.array(traces[model][loss])
     colour = colours[model]
     data_series[model], = plt.plot(series_x, series_y, colour, label=model, alpha=0.8)
