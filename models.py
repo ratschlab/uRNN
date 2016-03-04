@@ -470,22 +470,18 @@ def complex_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=Fals
     #
 
 def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=False, loss_function='CE', basis=None):
-    # STEPH: hey, it's mine! so much boilerplate!
-    #   of code: this is derived from complex_RNN!
     np.random.seed(1234)
     rng = np.random.RandomState(1234)
     
     x, y = initialize_data_nodes(loss_function, input_type, out_every_t)
     inputs = [x, y]
 
-    # TODO: all from here (requires some engineering thoughts)
-    # encoder
+    # ---- encoder ---- #
     V = initialize_matrix(n_input, n_hidden, 'V', rng)
-    # decoder
+    # ---- decoder ---- #
     U = initialize_matrix(n_hidden, n_output, 'U', rng)
     out_bias = theano.shared(np.zeros((n_output,), dtype=theano.config.floatX), name='out_bias')
-    # hidden part
-    # TODO: how to initialise lambdas?
+    # ---- hidden part ---- #
     lambdas = theano.shared(np.asarray(rng.uniform(low=-1,
                                                    high=1,
                                                    size=(n_hidden*(n_hidden-1)/2,)),
@@ -516,7 +512,6 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
     # all the parameters!
     parameters = [V, U, out_bias, lambdas, h_0, hidden_bias]
 
-    # define the recurrence used by theano.scan
     def recurrence(x_t, y_t, h_prev, cost_prev, acc_prev, V, O, hidden_bias, out_bias, U):  
         if loss_function == 'CE':
             # STEPH: why is this cast here???
@@ -536,9 +531,8 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
         return h_t, cost_t, acc_t
 
     # compute hidden states
-    # STEPH: the same as in tanhRNN, here (except U ~ out_mat)
     h_0_batch = T.tile(h_0, [x.shape[1], 1])
-    non_sequences = [theta, V, hidden_bias, out_bias, U]
+    non_sequences = [V, O, hidden_bias, out_bias, U]
     if out_every_t:
         sequences = [x, y]
     else:
