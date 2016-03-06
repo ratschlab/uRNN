@@ -8,6 +8,7 @@ from theano.ifelse import ifelse
 from models import *
 from optimizations import *    
 import argparse
+import pdb
 
 
 def generate_data(time_steps, n_data):
@@ -81,6 +82,15 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
                                                 out_every_t=out_every_t, loss_function=loss_function)
         gradients = T.grad(costs[0], parameters)
 
+    elif (model == 'orthogonal_RNN'):
+        # TODO: (STEPH) write orthogonal_RNN
+        #   note: may want another option specifying the basis of the Lie algebra
+        inputs, parameters, costs = orthogonal_RNN(n_input, n_hidden, n_output, 
+                                                   input_type=input_type,
+                                                   out_every_t=out_every_t, 
+                                                   loss_function=loss_function)
+        gradients = T.grad(costs[0], parameters)
+
     elif (model == 'general_unitary_RNN'):
         # TODO: (STEPH) write general_unitary_RNN
         #   note: may want another option specifying the basis of the Lie algebra
@@ -128,6 +138,11 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     test = theano.function([], costs[0], givens=givens_test)
     # STEPH: no updates, here
 
+    # YOLO
+    print 'pretrain...'
+    print updates
+    pdb.set_trace()
+    # DEYOLO
 
     # --- Training Loop ---------------------------------------------------------------
 

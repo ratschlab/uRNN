@@ -487,15 +487,20 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
                                                    size=(n_hidden*(n_hidden-1)/2,)),
                                        dtype=theano.config.floatX),
                             name='lambdas')
+    # warning: symbolic_basis is expensive, memory-wise!
     if basis is None:
-        symbolic_basis = theano.shared(np.asarray(rng.normal(size=(n_hidden*(n_hidden-1)/2, 
-                                                                   n_hidden,
+        symbolic_basis = theano.shared(np.asarray(rng.normal(size=(n_hidden,
+                                                                   n_hidden*(n_hidden-1)/2, 
                                                                    n_hidden)),
                                                   dtype=theano.config.floatX),
                                        name='symbolic_basis')
     else:
         symbolic_basis = theano.shared(basis, name='symbolic_basis')
-    O = T.exp(T.dot(lambdas, symbolic_basis))
+    # here it is!
+    #O = T.exp(T.dot(lambdas, symbolic_basis))
+    # YOLO
+    O = T.dot(lambdas, symbolic_basis)
+    # END YOLO
     # TODO: check maths on bucket
     bucket = np.sqrt(3. / 2 / n_hidden) 
     h_0 = theano.shared(np.asarray(rng.uniform(low=-bucket,
@@ -509,7 +514,7 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
                                            dtype=theano.config.floatX), 
                                 name='hidden_bias')
    
-    # all the parameters!
+    # ---- all the parameters! ---- #
     parameters = [V, U, out_bias, lambdas, h_0, hidden_bias]
 
     def recurrence(x_t, y_t, h_prev, cost_prev, acc_prev, V, O, hidden_bias, out_bias, U):  
@@ -518,8 +523,11 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
             data_lin_output = V[T.cast(x_t, 'int32')]
         else:
             data_lin_output = T.dot(x_t, V)
-
-        h_t = T.nnet.relu(T.dot(O, h_prev) + data_lin_output + hidden_bias.dimshuffle('x', 0))
+        
+        h_t = T.nnet.relu(T.dot(h_prev, O) + data_lin_output + hidden_bias.dimshuffle('x', 0))
+        # YOLO
+        print h_t
+        # ENDYOLO
 
         if out_every_t:
             lin_output = T.dot(h_t, U) + out_bias.dimshuffle('x', 0)
