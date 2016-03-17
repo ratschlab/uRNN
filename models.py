@@ -1,6 +1,7 @@
 import theano, cPickle
 import theano.tensor as T
 import numpy as np
+import pdb
 from fftconv import cufft, cuifft
 
 def initialize_matrix(n_in, n_out, name, rng):
@@ -482,24 +483,33 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
     U = initialize_matrix(n_hidden, n_output, 'U', rng)
     out_bias = theano.shared(np.zeros((n_output,), dtype=theano.config.floatX), name='out_bias')
     # ---- hidden part ---- #
+    dim_of_lie_algebra = n_hidden*(n_hidden-1)/2
     lambdas = theano.shared(np.asarray(rng.uniform(low=-1,
                                                    high=1,
-                                                   size=(n_hidden*(n_hidden-1)/2,)),
+                                                   size=(dim_of_lie_algebra,)),
                                        dtype=theano.config.floatX),
                             name='lambdas')
     # warning: symbolic_basis is expensive, memory-wise!
     if basis is None:
-        symbolic_basis = theano.shared(np.asarray(rng.normal(size=(n_hidden,
-                                                                   n_hidden*(n_hidden-1)/2, 
+        symbolic_basis = theano.shared(np.asarray(rng.normal(size=(dim_of_lie_algebra,
+                                                                   n_hidden,
                                                                    n_hidden)),
                                                   dtype=theano.config.floatX),
                                        name='symbolic_basis')
     else:
         symbolic_basis = theano.shared(basis, name='symbolic_basis')
     # here it is!
-    #O = T.exp(T.dot(lambdas, symbolic_basis))
+    #O = T.expm(T.dot(lambdas, symbolic_basis))
     # YOLO
-    O = T.dot(lambdas, symbolic_basis)
+    #O = T.tensordot(lambdas, symbolic_basis, axes=[0, 0])
+    #O = lambdas[0]*symbolic_basis[0] + lambdas[10]*symbolic_basis[10]
+    O = lambdas[dim_of_lie_algebra-1]*symbolic_basis[0]
+    #lambdas[n_hidden*(n_hidden-1)/2 -1]*symbolic_basis[n_hidden*(n_hidden-1)/2 -1]
+    # RIDICULOUS HACK THEANO IS WEIRD
+    #for k in xrange(1, n_hidden*(n_hidden-1)/2):
+#        O += lambdas[k]*symbolic_basis[k]
+#    pdb.set_trace()
+    #O = T.eye(n_hidden, n_hidden)
     # END YOLO
     # TODO: check maths on bucket
     bucket = np.sqrt(3. / 2 / n_hidden) 
@@ -523,11 +533,7 @@ def orthogonal_RNN(n_input, n_hidden, n_output, input_type='real', out_every_t=F
             data_lin_output = V[T.cast(x_t, 'int32')]
         else:
             data_lin_output = T.dot(x_t, V)
-        
         h_t = T.nnet.relu(T.dot(h_prev, O) + data_lin_output + hidden_bias.dimshuffle('x', 0))
-        # YOLO
-        print h_t
-        # ENDYOLO
 
         if out_every_t:
             lin_output = T.dot(h_t, U) + out_bias.dimshuffle('x', 0)
