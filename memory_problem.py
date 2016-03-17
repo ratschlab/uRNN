@@ -71,6 +71,13 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
                                                 out_every_t=out_every_t, loss_function=loss_function)
         gradients = T.grad(costs[0], parameters)
 
+    elif (model == 'orthogonal_RNN'):
+        # TODO: (STEPH) write orthogonal_RNN
+        #    note: may want another option specifying the basis of the Lie algebra
+        inputs, parameters, costs = orthogonal_RNN(n_input, n_hidden, n_output,
+                                                   input_type=input_type,
+                                                   out_every_t=out_every_t,
+                                                   loss_function=loss_function)
     elif (model == 'general_unitary_RNN'):
         # TODO: (STEPH) write general_unitary_RNN
         #   note: may want another option specifying the basis of the Lie algebra
@@ -91,7 +98,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
         gradients = [T.clip(g, -gradient_clipping, gradient_clipping) for g in gradients]
     
     else:
-        print "Unsuported model:", model
+        print "Unsupported model:", model
         return
 
  
@@ -178,8 +185,8 @@ if __name__=="__main__":
     parser.add_argument("savefile")
     parser.add_argument("model", default='complex_RNN')
     parser.add_argument("input_type", default='categorical')
-    parser.add_argument("out_every_t", default='False')
-    parser.add_argument("loss_function", default='MSE')
+    parser.add_argument("out_every_t", default='True')
+    parser.add_argument("loss_function", default='CE')
 
     args = parser.parse_args()
     dict = vars(args)

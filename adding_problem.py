@@ -111,7 +111,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
         gradients = [T.clip(g, -gradient_clipping, gradient_clipping) for g in gradients]
     
     else:
-        print "Unsuported model:", model
+        print "Unsupported model:", model
         return
 
 
@@ -211,7 +211,7 @@ if __name__=="__main__":
     parser.add_argument("learning_rate", type=float, default=0.001)
     parser.add_argument("savefile")
     parser.add_argument("model", default='complex_RNN')
-    parser.add_argument("input_type", default='categorical')
+    parser.add_argument("input_type", default='real')
     parser.add_argument("out_every_t", default='False')
     parser.add_argument("loss_function", default='MSE')
     
@@ -238,6 +238,9 @@ if __name__=="__main__":
         ERR = True
     if not kwargs['input_type'] == 'real':
         print 'input_type must be real'
+        ERR = True
+    if not kwargs['out_every_t'] == False:
+        print 'out_every_t must be False'
         ERR = True
     if ERR:
         sys.exit('Arguments failed checks, quitting.')
