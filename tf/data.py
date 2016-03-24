@@ -37,11 +37,11 @@ def generate_adding(T, num_examples):
     #   this is: for each example in num_examples, it's the sum of two elements from
     #   the training instance (size T)...
 
-    return x, y
+    return (x, y)
 
-def generate_memory(T, num_examples, sequence_length=10):
-    # in practice, sequence_length is seemingly always 10
-    seq = np.random.randint(1, high=9, size=(num_examples, sequence_length))
+def generate_memory(T, num_examples, seq_len=10):
+    # in practice, seq_len is seemingly always 10
+    seq = np.random.randint(1, high=9, size=(num_examples, seq_len))
     # STEPH: the sequence to remember
     #   uncertain why training examples are now dimension 0, but OK it gets
     #   transposed at the end... (probably to make concatenating easier?)
@@ -51,7 +51,7 @@ def generate_memory(T, num_examples, sequence_length=10):
     # STEPH: T zeros
     marker = 9 * np.ones((num_examples, 1))
     # STEPH: 1 set of 9s ('start reproducing sequence' marker)
-    seq_zeros = np.zeros((num_examples, sequence_length))
+    seq_zeros = np.zeros((num_examples, seq_len))
     # STEPH: length-of-sequence set of zeros
 
     x = np.concatenate((seq, zeros1, marker, seq_zeros), axis=1).astype('int32')
@@ -60,4 +60,34 @@ def generate_memory(T, num_examples, sequence_length=10):
     y = np.concatenate((seq_zeros, zeros2, seq), axis=1).astype('int32')
     # STEPH: desired output is: T + length-of-seq sequence zeros, then sequence
     
-    return x, y
+    return (x, y)
+
+class ExperimentData(object):
+    def __init__(self, N, batch_size, experiment, T):
+        self.N = N
+        self.batch_size = batch_size
+        if experiment == 'adding':
+            self.x, self.y = generate_adding(T, N)
+            self.dtype = tf.float32
+            self.input_size = 2
+            self.sequence_length = T
+        elif experiment == 'memory':
+            self.x, self.y = generate_memory(T, N, seq_len=10)
+            self.dtype = tf.int32
+            self.input_size = 1
+            self.sequence_length = self.x.shape[1]      # this is probably T+20
+        else:
+            raise NotImplementedError
+    def shuffle(self):
+        permutation = np.random.permutation(self.N)
+        self.x = self.x[permutation]
+        self.y = self.y[permutation]
+    def make_placeholders(self):
+        placeholder_x = tf.placeholder(self.dtype, [self.batch_size] + list(self.x.shape[1:]))
+        placeholder_y = tf.placeholder(self.dtype, [self.batch_size] + list(self.y.shape[1:]))
+        return placeholder_x, placeholder_y
+    def get_batch(self, i):
+        batch_x = self.x[i * self.batch_size : (i + 1) * self.batch_size]
+        batch_y = self.y[i * self.batch_size : (i + 1) * self.batch_size]
+        return batch_x, batch_y
+    # TODO: iterator for grabbing batches
