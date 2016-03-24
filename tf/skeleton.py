@@ -16,11 +16,19 @@ import pdb
 
 # local imports
 import models
+import data
 
-#
+# === constants === #
+N_TRAIN = int(1e5)
+N_TEST = int(1e4)
+N_VALI = int(1e4)
+# temporary constants (will be folded into a cfg)
 BATCH_SIZE = 10
-CELL_INPUT_SIZE = 1
-SEQ_LENGTH = 120
+NUM_EPOCHS = 5
+NUM_BATCHES = N_TRAIN / BATCH_SIZE
+SEQ_LENGTH = 10
+T = 100
+DO_VALI = False
 
 # EVERYTHING IS FIRE
 
@@ -39,7 +47,7 @@ def get_cost(outputs, y):
     """
     cost = tf.zeros(shape=(SEQ_LENGTH, 1))
     for i in xrange(SEQ_LENGTH):
-        out = outputs[i][:, 0]
+        out = outputs[i][:SEQ_LENGTH, 0]
         y_i = y[:, i]
         # THIS IS ABSURD
         intermediate = tf.add(out, tf.cast(y_i, tf.float32))
@@ -62,27 +70,38 @@ def update_step(cost):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-def main():
-    
+def main(experiment='adding'):
+    # === create data === #
+    train_data = data.ExperimentData(N_TRAIN, BATCH_SIZE, experiment, T)
+    vali_data = data.ExperimentData(N_VALI, BATCH_SIZE, experiment, T)
+    test_data = data.ExperimentData(N_TEST, BATCH_SIZE, experiment, T)
+   
+    # === get shapes and constants === #
+    sequence_length = train_data.sequence_length
+    input_size = train_data.input_size
+    hidden_size = 20
+
     with tf.Session() as session:
         # === construct the graph === #
-        batch_x = tf.placeholder(tf.float32, [BATCH_SIZE, SEQ_LENGTH, CELL_INPUT_SIZE])
-        batch_y = tf.placeholder(tf.float32, [BATCH_SIZE, CELL_INPUT_SIZE])
+        # (doesn't actually matter which one we make placeholders out of)
+        x, y = train_data.make_placeholders()
 
         # === model select === #
-        predictions = models.simple_RNN(batch_x, n_hidden=20, batch_size=BATCH_SIZE, seq_length=SEQ_LENGTH)
+        outputs = models.simple_RNN(x, n_hidden=hidden_size, batch_size=BATCH_SIZE, sequence_length=sequence_length)
 
         # === ops and things === #
-        cost = get_cost(predictions, batch_y)
+        cost = get_cost(outputs, y)
         train_op = update_step(cost)
 
         # === train loop === #
-        tf.initialize_all_variables()
+        tf.initialize_all_variables().run()
         pdb.set_trace()
-        sys.exit()
         
-        for epoch in xrange(config.num_epochs):
-            for batch in xrange(config.num_batches):
+        for epoch in xrange(NUM_EPOCHS):
+            for batch_index in xrange(NUM_BATCHES):
+                # definitely scope for fancy iterator but yolo
+                batch_x, batch_y = train_data.get_batch(batch_index)
+                pdb.set_trace()
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 print epoch, '\t', batch, '\t', train_cost
                 if DO_VALI:
@@ -91,10 +110,10 @@ def main():
                     # check if best, save parameters, etc.
 
             # shuffle the data at each epoch
-            #data.shuffle()
+            train_data.shuffle()
 
         print 'Training completed. Performance of best model (by validation set) on test data:',
-        test_cost = session.run([cost], {x: test_x, y: test_y, parameters: best_parameters})
+        #test_cost = session.run([cost], {x: test_x, y: test_y, parameters: best_parameters})
 
 #if __name__ == "__main__":
 #    main()
