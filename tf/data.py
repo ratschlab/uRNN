@@ -6,6 +6,7 @@
 
 import numpy as np
 import tensorflow as tf
+import pdb
 
 def generate_adding(T, num_examples):
     # STEPH: num_examples is n_train or n_test
@@ -57,10 +58,19 @@ def generate_memory(T, num_examples, seq_len=10):
     x = np.concatenate((seq, zeros1, marker, seq_zeros), axis=1).astype('int32')
     # STEPH: the full input is: sequence, T-1 zeros, special marker,
     #   sequence-length zeros (empty category)
+
+    # STEPH: So, to unify the implementation we can make it one-hot
+    x_onehot = np.zeros(shape=list(x.shape) + [10])
+    # STEPH: this is inefficient but I feel very unwell and can make it smarter later
+    # TODO: make smarter
+    for (n, example) in enumerate(x):
+        # training example, now we set values
+        x_onehot[n, xrange(len(example)), example] = 1
+
     y = np.concatenate((seq_zeros, zeros2, seq), axis=1).astype('int32')
     # STEPH: desired output is: T + length-of-seq sequence zeros, then sequence
-    
-    return (x, y)
+   
+    return (x_onehot, y)
 
 class ExperimentData(object):
     def __init__(self, N, batch_size, experiment, T):
@@ -74,7 +84,7 @@ class ExperimentData(object):
         elif experiment == 'memory':
             self.x, self.y = generate_memory(T, N, seq_len=10)
             self.dtype = tf.int32
-            self.input_size = 1
+            self.input_size = 10
             self.sequence_length = self.x.shape[1]      # this is probably T+20
         else:
             raise NotImplementedError
