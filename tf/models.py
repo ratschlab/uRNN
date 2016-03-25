@@ -8,13 +8,15 @@
 # ------------------------------------------
 
 import tensorflow as tf
+import numpy as np
+
 from tensorflow.models.rnn import rnn
 # for testing and learning
-from tensorflow.models.rnn.rnn_cell import RNNCell, linear, BasicRNNCell
+from tensorflow.models.rnn.rnn_cell import RNNCell, BasicRNNCell
 from tensorflow.python.ops.math_ops import tanh
 from tensorflow.python.ops import variable_scope as vs
 
-def fixed_initializer(n_in_list, n_out, dtype):
+def fixed_initializer(n_in_list, n_out):
     """
     This is a bit of a contrived initialiser to be consistent with the
     'initialize_matrix' function in models.py from the complex_RNN repo
@@ -37,16 +39,16 @@ def fixed_initializer(n_in_list, n_out, dtype):
     So we have to initialise our special linear operator to have samples from different
     uniform distributions. Sort of gross, right? But it'll be fine.
     """
-    matrix = np.empty(shape=(sum(n_in_list), n_out), dtype=dtype)
+    matrix = np.empty(shape=(sum(n_in_list), n_out))
     row_marker = 0
     for n_in in n_in_list:
         scale = np.sqrt(6.0/ (n_in + n_out))
         values = np.asarray(np.random.uniform(low=-scale, high=scale,
-                                              size=(n_in, n_out)),
-                                              dtype=dtype)
+                                              size=(n_in, n_out)))
+        # NOTE: HARDCODED DTYPE
         matrix[row_marker:(row_marker + n_in), :] = values
-    # uxaux
-    return tf.constant(values)
+        row_marker += n_in
+    return tf.constant(matrix, dtype=tf.float32)
 
 def linear(args, output_size, bias, bias_start=0.0, scope=None):
     """
@@ -55,47 +57,47 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None):
 
     Original docstring:
     Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
-  Args:
-    args: a 2D Tensor or a list of 2D, batch x n, Tensors.
-    output_size: int, second dimension of W[i].
-    bias: boolean, whether to add a bias term or not.
-    bias_start: starting value to initialize the bias; 0 by default.
-    scope: VariableScope for the created subgraph; defaults to "Linear".
-  Returns:
-    A 2D Tensor with shape [batch x output_size] equal to
-    sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
-  Raises:
-    ValueError: if some of the arguments has unspecified or wrong shape.
+    Args:
+        args: a 2D Tensor or a list of 2D, batch x n, Tensors.
+        output_size: int, second dimension of W[i].
+        bias: boolean, whether to add a bias term or not.
+        bias_start: starting value to initialize the bias; 0 by default.
+        scope: VariableScope for the created subgraph; defaults to "Linear".
+    Returns:
+        A 2D Tensor with shape [batch x output_size] equal to
+        sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
+    Raises:
+        ValueError: if some of the arguments has unspecified or wrong shape.
   """
-  assert args
-  if not isinstance(args, (list, tuple)):
-      args = [args]
+    assert args
+    if not isinstance(args, (list, tuple)):
+        args = [args]
 
-  # Calculate the total size of arguments on dimension 1.
-  total_arg_size = 0
-  shapes = [a.get_shape().as_list() for a in args]
-  for shape in shapes:
-      if len(shape) != 2:
-          raise ValueError("Linear is expecting 2D arguments: %s" % str(shapes))
-    if not shape[1]:
-        raise ValueError("Linear expects shape[1] of arguments: %s" % str(shapes))
-    else:
-        total_arg_size += shape[1]
+    # Calculate the total size of arguments on dimension 1.
+    total_arg_size = 0
+    shapes = [a.get_shape().as_list() for a in args]
+    n_in_list = []
+    for shape in shapes:
+        if len(shape) != 2:
+            raise ValueError("Linear is expecting 2D arguments: %s" % str(shapes))
+        if not shape[1]:
+            raise ValueError("Linear expects shape[1] of arguments: %s" % str(shapes))
+        else:
+            total_arg_size += shape[1]
+            n_in_list.append(shape[1])
 
-    # prep for my initialiser
-    n_in_list = [a.get_shape().as_list()[1] for a in args]
-  # Now the computation.
-  with vs.variable_scope(scope or "Linear"):
-      matrix = vs.get_variable("Matrix", [total_arg_size, output_size], initializer=fixed_initialiser(n_in_list, output_size, dtype))
-    if len(args) == 1:
-        res = math_ops.matmul(args[0], matrix)
-    else:
-        res = math_ops.matmul(array_ops.concat(1, args), matrix)
-    if not bias:
-        return res
-    bias_term = vs.get_variable(
-            "Bias", [output_size],
-            initializer=init_ops.constant_initializer(bias_start))
+    # Now the computation.
+    with vs.variable_scope(scope or "Linear"):
+        matrix = vs.get_variable("Matrix", initializer=fixed_initializer(n_in_list, output_size))
+        if len(args) == 1:
+            res = tf.matmul(args[0], matrix)
+        else:
+            res = tf.matmul(tf.concat(1, args), matrix)
+        if not bias:
+            return res
+        bias_term = vs.get_variable(
+                "Bias", [output_size],
+                initializer=tf.constant_initializer(bias_start))
     return res + bias_term
 
 def trivial(inputs, n_input, n_hidden, n_output, experiment):
