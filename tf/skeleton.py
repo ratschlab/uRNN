@@ -41,17 +41,39 @@ DO_VALI = False
 # need thing to save parameters/model/graph for 'best results'
 #   (will need to reload these values for the testing at the end)
 
-def get_cost(outputs, y):
+def get_cost(outputs, y, loss_fn='MSE'):
     """
-    check experimental stuff also
+    Either cross-entropy or MSE.
+    This will involve some averaging over a batch innit.
+
+    Let's clarify some shapes:
+        outputs is a LIST of length input_size,
+            each element is a Tensor of shape (BATCH_SIZE, output_size)
+        y is a Tensor of shape (BATCH_SIZE, output_size)
     """
-    cost = tf.zeros(shape=(SEQ_LENGTH, 1))
-    for i in xrange(SEQ_LENGTH):
-        out = outputs[i][:SEQ_LENGTH, 0]
-        y_i = y[:, i]
-        # THIS IS ABSURD
-        intermediate = tf.add(out, tf.cast(y_i, tf.float32))
-        cost = tf.add(cost, intermediate)
+    if loss_fn == 'MSE':
+        # discount all but the last of the outputs
+        output = outputs[-1]
+        # now this object is shape BATCH_SIZE, output_size
+        cost = 2*tf.nn.l2_loss(tf.sub(output, y))
+    elif loss_fn == 'CE':
+        raise NotImplementedError
+        # include all the outputs, but we need to do some weirdery, ugh
+        wat = tf.pack(output)
+        # now we have a tensor of shape (input_size, batch_size, output_size)
+        # TODO: all omg oall
+        # DO THINGS!
+        # DO thINGS!
+#        cost = tf.zeros(shape=(SEQ_LENGTH, 1))
+#        for i in xrange(SEQ_LENGTH):
+#            out = outputs[i][:SEQ_LENGTH, 0]
+#            y_i = y[:, i]
+            # THIS IS ABSURD
+#            intermediate = tf.add(out, tf.cast(y_i, tf.float32))
+#            cost = tf.add(cost, intermediate)
+
+    else:
+        raise NotImplementedError
     return cost
 
 def update_step(cost):
@@ -75,10 +97,17 @@ def main(experiment='adding'):
     train_data = data.ExperimentData(N_TRAIN, BATCH_SIZE, experiment, T)
     vali_data = data.ExperimentData(N_VALI, BATCH_SIZE, experiment, T)
     test_data = data.ExperimentData(N_TEST, BATCH_SIZE, experiment, T)
-   
+  
     # === get shapes and constants === #
     sequence_length = train_data.sequence_length
     input_size = train_data.input_size
+    # YOLO: finish doing this bit
+    if experiment == 'adding':
+        output_size = 1
+        loss_fn = 'MSE'
+    elif experiment == 'memory':
+        output_size = 9
+        loss_fn = 'CE'
     hidden_size = 20
 
     with tf.Session() as session:
@@ -88,6 +117,7 @@ def main(experiment='adding'):
 
         # === model select === #
         outputs = models.simple_RNN(x, n_hidden=hidden_size, batch_size=BATCH_SIZE, sequence_length=sequence_length)
+        pdb.set_trace()
 
         # === ops and things === #
         cost = get_cost(outputs, y)
@@ -95,15 +125,16 @@ def main(experiment='adding'):
 
         # === train loop === #
         tf.initialize_all_variables().run()
-        pdb.set_trace()
         
         for epoch in xrange(NUM_EPOCHS):
             for batch_index in xrange(NUM_BATCHES):
                 # definitely scope for fancy iterator but yolo
                 batch_x, batch_y = train_data.get_batch(batch_index)
-                pdb.set_trace()
+              
+                # TODO: BUG IN COST
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
-                print epoch, '\t', batch, '\t', train_cost
+                pdb.set_trace()
+                print epoch, '\t', batch_index, '\t', train_cost
                 if DO_VALI:
                     vali_cost = session.run([cost], {x: vali_x, y: vali_y})
                     print '\t\tTEST:', vali_cost
