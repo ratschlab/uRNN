@@ -55,31 +55,20 @@ def get_cost(outputs, y, loss_fn='MSE'):
         # discount all but the last of the outputs
         output = outputs[-1]
         # now this object is shape BATCH_SIZE, output_size
-        cost = 2*tf.nn.l2_loss(tf.sub(output, y))
+        cost = tf.reduce_mean(tf.sub(output, y) ** 2)
     elif loss_fn == 'CE':
-        raise NotImplementedError
-        # include all the outputs, but we need to do some weirdery, ugh
-        wat = tf.pack(output)
-        # now we have a tensor of shape (input_size, batch_size, output_size)
-        # TODO: all omg oall
-        # DO THINGS!
-        # DO thINGS!
-#        cost = tf.zeros(shape=(SEQ_LENGTH, 1))
-#        for i in xrange(SEQ_LENGTH):
-#            out = outputs[i][:SEQ_LENGTH, 0]
-#            y_i = y[:, i]
-            # THIS IS ABSURD
-#            intermediate = tf.add(out, tf.cast(y_i, tf.float32))
-#            cost = tf.add(cost, intermediate)
-
+        #ok, cross-entropy!
+        # (there may be more efficient ways to do this)
+        cost = tf.zeros([1])
+        for (i, output) in enumerate(outputs):
+            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, y[:, i])
+            cost = tf.add(cost, tf.reduce_mean(cross_entropy))
+        cost = tf.div(cost, i + 1)
     else:
         raise NotImplementedError
     return cost
 
 def update_step(cost):
-    """
-    uhh
-    """
     opt = tf.train.RMSPropOptimizer(learning_rate=0.01,
                                     decay=0.01,
                                     momentum=0.9,
@@ -120,7 +109,7 @@ def main(experiment='adding'):
         pdb.set_trace()
 
         # === ops and things === #
-        cost = get_cost(outputs, y)
+        cost = get_cost(outputs, y, loss_fn)
         train_op = update_step(cost)
 
         # === train loop === #
