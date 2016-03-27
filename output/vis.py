@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 plt.clf()
 
+BATCH_SIZE = 20
+
 # --- initialise --- #
 # grab inputs
 T = int(sys.argv[1])
@@ -22,10 +24,10 @@ else:
     sys.exit('Unknown task', task)
 plot_test = sys.argv[3] == 'test'
 if plot_test:
-    scaling_factor = 1000
+    scaling_factor = 50*BATCH_SIZE
     plot_fname = task+'_'+str(T)+'_test.png'
 else:
-    scaling_factor = 20
+    scaling_factor = BATCH_SIZE
     plot_fname = task+'_'+str(T)+'_train.png'
 
 print plot_fname
