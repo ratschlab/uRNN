@@ -55,7 +55,7 @@ def generate_memory(T, num_examples, seq_len=10):
     seq_zeros = np.zeros((num_examples, seq_len))
     # STEPH: length-of-sequence set of zeros
 
-    x = np.concatenate((seq, zeros1, marker, seq_zeros), axis=1).astype('int32')
+    x = np.concatenate((seq, zeros1, marker, seq_zeros), axis=1).astype('int64')
     # STEPH: the full input is: sequence, T-1 zeros, special marker,
     #   sequence-length zeros (empty category)
 
@@ -67,15 +67,14 @@ def generate_memory(T, num_examples, seq_len=10):
         # training example, now we set values
         x_onehot[n, xrange(len(example)), example] = 1
 
-    y = np.concatenate((seq_zeros, zeros2, seq), axis=1).astype('int32')
+    y = np.concatenate((seq_zeros, zeros2, seq), axis=1).astype('int64')
     # STEPH: desired output is: T + length-of-seq sequence zeros, then sequence
    
     return (x_onehot, y)
 
 class ExperimentData(object):
-    def __init__(self, N, batch_size, experiment, T):
+    def __init__(self, N, experiment, T):
         self.N = N
-        self.batch_size = batch_size
         if experiment == 'adding':
             self.x, self.y = generate_adding(T, N)
             self.dtype = tf.float32
@@ -83,7 +82,7 @@ class ExperimentData(object):
             self.sequence_length = T
         elif experiment == 'memory':
             self.x, self.y = generate_memory(T, N, seq_len=10)
-            self.dtype = tf.int32
+            self.dtype = tf.int64
             self.input_size = 10
             self.sequence_length = self.x.shape[1]      # this is probably T+20
         else:
@@ -93,11 +92,11 @@ class ExperimentData(object):
         self.x = self.x[permutation]
         self.y = self.y[permutation]
     def make_placeholders(self):
-        placeholder_x = tf.placeholder(self.dtype, [self.batch_size] + list(self.x.shape[1:]))
-        placeholder_y = tf.placeholder(self.dtype, [self.batch_size] + list(self.y.shape[1:]))
+        placeholder_x = tf.placeholder(tf.float32, [None] + list(self.x.shape[1:]))
+        placeholder_y = tf.placeholder(self.dtype, [None] + list(self.y.shape[1:]))
         return placeholder_x, placeholder_y
-    def get_batch(self, i):
-        batch_x = self.x[i * self.batch_size : (i + 1) * self.batch_size]
-        batch_y = self.y[i * self.batch_size : (i + 1) * self.batch_size]
+    def get_batch(self, i, batch_size):
+        batch_x = self.x[i * batch_size : (i + 1) * batch_size]
+        batch_y = self.y[i * batch_size : (i + 1) * batch_size]
         return batch_x, batch_y
     # TODO: iterator for grabbing batches

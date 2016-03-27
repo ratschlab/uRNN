@@ -85,9 +85,9 @@ def main(experiment='adding'):
     T = 100
 
     # === create data === #
-    train_data = data.ExperimentData(N_TRAIN, BATCH_SIZE, experiment, T)
-    vali_data = data.ExperimentData(N_VALI, BATCH_SIZE, experiment, T)
-    test_data = data.ExperimentData(N_TEST, BATCH_SIZE, experiment, T)
+    train_data = data.ExperimentData(N_TRAIN, experiment, T)
+    vali_data = data.ExperimentData(N_VALI, experiment, T)
+    test_data = data.ExperimentData(N_TEST, experiment, T)
   
     # === get shapes and constants === #
     sequence_length = train_data.sequence_length
@@ -124,7 +124,7 @@ def main(experiment='adding'):
         for epoch in xrange(NUM_EPOCHS):
             for batch_index in xrange(NUM_BATCHES):
                 # definitely scope for fancy iterator but yolo
-                batch_x, batch_y = train_data.get_batch(batch_index)
+                batch_x, batch_y = train_data.get_batch(batch_index, BATCH_SIZE)
              
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
