@@ -23,22 +23,11 @@ import data
 N_TRAIN = int(1e5)
 N_TEST = int(1e4)
 N_VALI = int(1e4)
-# temporary constants (will be folded into a cfg)
-BATCH_SIZE = 10
-NUM_EPOCHS = 5
-NUM_BATCHES = N_TRAIN / BATCH_SIZE
-SEQ_LENGTH = 10
-T = 100
-DO_VALI = False
 
 # EVERYTHING IS FIRE
 
 # need a way of controlling all the experimental options
-#train_op = # thing what updates variables given thems and the costs
-#get_batch = # thing what prepares batch of data to be fed into model
 # need thing to get predictions from RNN (model-specific, also experiment-ish)
-# need thing to get cost from predictions and labels (experiment-specific)
-#   (this can be fed test or train or vali data!)
 # need thing to save parameters/model/graph for 'best results'
 #   (will need to reload these values for the testing at the end)
 
@@ -69,20 +58,32 @@ def get_cost(outputs, y, loss_fn='MSE'):
         raise NotImplementedError
     return cost
 
-def update_step(cost):
-    opt = tf.train.RMSPropOptimizer(learning_rate=0.01,
-                                    decay=0.01,
-                                    momentum=0.9,
-                                    epsilon=0.0001)
+def update_step(cost, learning_rate=0.01, decay=0.01, 
+                momentum=0.9, epsilon=0.0001, clipping=False):
+    opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate,
+                                    decay=decay,
+                                    momentum=momentum,
+                                    epsilon=epsilon)
     print 'By the way, the gradients of cost are with respect to the following Variables:'
     for v in tf.trainable_variables():
         print v.name
-    # optional clipping may occur
+    if clipping:
+        # optional clipping may occur
+        # TODO: clipping
+        pass
     g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
 def main(experiment='adding'):
+    # === get options === #
+    state_size = 20
+    # temporary constants (will be folded into a cfg)
+    BATCH_SIZE = 10
+    NUM_EPOCHS = 5
+    NUM_BATCHES = N_TRAIN / BATCH_SIZE
+    T = 100
+
     # === create data === #
     train_data = data.ExperimentData(N_TRAIN, BATCH_SIZE, experiment, T)
     vali_data = data.ExperimentData(N_VALI, BATCH_SIZE, experiment, T)
@@ -95,10 +96,11 @@ def main(experiment='adding'):
     if experiment == 'adding':
         output_size = 1
         loss_fn = 'MSE'
+        assert input_size == 2
     elif experiment == 'memory':
         output_size = 9
         loss_fn = 'CE'
-    state_size = 20
+        assert input_size == 10
 
     with tf.Session() as session:
         # === construct the graph === #
@@ -128,9 +130,9 @@ def main(experiment='adding'):
                 train_cost_trace.append(train_cost)
                 #print epoch, '\t', batch_index, '\t', train_cost
                 if batch_index % 50 == 0:
-                    vali_cost = session.run([cost], {x: vali_data.x, y: vali_data.y})
+                    vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
                     vali_cost_trace.append(vali_cost)
-                    print '\t\tTEST:', vali_cost
+                    print epoch, '\t', batch_index, '\t\tVALI:', vali_cost
                     if vali_cost < best_vali_cost:
                         # save best parameters
                         best_vali_cost = vali_cost
