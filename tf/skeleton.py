@@ -13,6 +13,7 @@
 import tensorflow as tf
 import numpy as np
 import pdb
+import cPickle
 
 # local imports
 import models
@@ -97,7 +98,7 @@ def main(experiment='adding'):
     elif experiment == 'memory':
         output_size = 9
         loss_fn = 'CE'
-    hidden_size = 20
+    state_size = 20
 
     with tf.Session() as session:
         # === construct the graph === #
@@ -105,29 +106,50 @@ def main(experiment='adding'):
         x, y = train_data.make_placeholders()
 
         # === model select === #
-        outputs = models.simple_RNN(x, n_hidden=hidden_size, batch_size=BATCH_SIZE, sequence_length=sequence_length)
-        pdb.set_trace()
+        outputs = models.simple_RNN(x, input_size, state_size, output_size, sequence_length=sequence_length)
 
         # === ops and things === #
         cost = get_cost(outputs, y, loss_fn)
         train_op = update_step(cost)
 
-        # === train loop === #
+        # === init === #
+        train_cost_trace = []
+        vali_cost_trace = []
+        best_vali_cost = 1e6
         tf.initialize_all_variables().run()
         
+        # === train loop === #
         for epoch in xrange(NUM_EPOCHS):
             for batch_index in xrange(NUM_BATCHES):
                 # definitely scope for fancy iterator but yolo
                 batch_x, batch_y = train_data.get_batch(batch_index)
-              
-                # TODO: BUG IN COST
+             
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
-                pdb.set_trace()
-                print epoch, '\t', batch_index, '\t', train_cost
-                if DO_VALI:
-                    vali_cost = session.run([cost], {x: vali_x, y: vali_y})
+                train_cost_trace.append(train_cost)
+                #print epoch, '\t', batch_index, '\t', train_cost
+                if batch_index % 50 == 0:
+                    vali_cost = session.run([cost], {x: vali_data.x, y: vali_data.y})
+                    vali_cost_trace.append(vali_cost)
                     print '\t\tTEST:', vali_cost
-                    # check if best, save parameters, etc.
+                    if vali_cost < best_vali_cost:
+                        # save best parameters
+                        best_vali_cost = vali_cost
+                    # save all and values
+
+                    # NOTE: format consistent with theano version
+                    # TODO: update alongside plotting script
+                    save_vals = {'parameters': None,
+                                 'rmsprop': None,
+                                 'train_loss': train_cost_trace,
+                                 'test_loss': vali_cost_trace,
+                                 'best_params': None,
+                                 'best_rms': None,
+                                 'best_test_loss': best_vali_cost,
+                                 'model': None,
+                                 'time_steps': T}
+
+                    cPickle.dump(save_vals, file('test_savefile', 'wb'),
+                                 cPickle.HIGHEST_PROTOCOL)
 
             # shuffle the data at each epoch
             train_data.shuffle()

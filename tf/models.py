@@ -9,6 +9,7 @@
 
 import tensorflow as tf
 import numpy as np
+import pdb
 
 from tensorflow.models.rnn import rnn
 # for testing and learning
@@ -125,10 +126,9 @@ def trivial(inputs, n_input, n_hidden, n_output, experiment):
     parameters = [weights, bias]             # list of Tensors
     return cost, accuracy, parameters
 
-def simple_RNN(x, n_hidden, batch_size, sequence_length):
-    # THIS ONLY WORKS FOR ADDING
-    #cell = BasicRNNCell(n_hidden)
-    cell = tanhRNNCell(input_size=1, state_size=n_hidden, output_size=20)
+def simple_RNN(x, input_size, state_size, output_size, sequence_length):
+    batch_size = tf.shape(x)[0]
+    cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
     state_0 = cell.zero_state(batch_size, x.dtype)
     # split up the input so the RNN can accept it...
     inputs = [tf.squeeze(input_, [1])
