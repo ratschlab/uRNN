@@ -193,7 +193,19 @@ class LSTMCell(steph_RNNCell):
         """
         LSTM, oooh
         """
+         #TODO: wow everything
         raise NotImplementedError
+        c_prev = array_ops.slice(state, [0, 0], [-1, self._state_size])
+        m_prev = array_ops.slice(state, [0, self._state_size], [-1, num_proj])
+        with vs.variable_scope(scope):
+            i = tf.sigmoid(linear([inputs, state], self._state_size, bias=True, scope='LSTM/Input'))
+            candidate = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Candidate'))
+            forget = tf.sigmoid(linear([inputs, state], self._state_size, bias=True, scope='Linear/Forget'))
+            intermediate_state = 
+            # new state
+            new_state = i * candidate + forget * state
+            # output
+        return False
 
 class complex_RNNCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='complex_RNN'):
