@@ -14,10 +14,9 @@ import pdb
 from tensorflow.models.rnn import rnn
 # for testing and learning
 from tensorflow.models.rnn.rnn_cell import RNNCell, BasicRNNCell
-from tensorflow.python.ops.math_ops import tanh
 from tensorflow.python.ops import variable_scope as vs
 
-def fixed_initializer(n_in_list, n_out):
+def fixed_initializer(n_in_list, n_out, identity=-1):
     """
     This is a bit of a contrived initialiser to be consistent with the
     'initialize_matrix' function in models.py from the complex_RNN repo
@@ -39,19 +38,29 @@ def fixed_initializer(n_in_list, n_out):
     
     So we have to initialise our special linear operator to have samples from different
     uniform distributions. Sort of gross, right? But it'll be fine.
+
+    Finally: identity: what does it do?
+    Well, it is possibly useful to initialise the weights associated with the internal state
+    to be the identity. (Specifically, this is done in the IRNN case.)
+    So if identity is >0, then it specifies which part of n_in_list (corresponding to a segment
+    of the resulting matrix) sholud be initialised to identity, and not uniformly randomly as the rest.
     """
     matrix = np.empty(shape=(sum(n_in_list), n_out))
     row_marker = 0
-    for n_in in n_in_list:
-        scale = np.sqrt(6.0/ (n_in + n_out))
-        values = np.asarray(np.random.uniform(low=-scale, high=scale,
-                                              size=(n_in, n_out)))
+    for (i, n_in) in enumerate(n_in_list):
+        if i == identity:
+            values = np.identity(n_in)
+        else:
+            scale = np.sqrt(6.0/ (n_in + n_out))
+            values = np.asarray(np.random.uniform(low=-scale, high=scale,
+                                                  size=(n_in, n_out)))
         # NOTE: HARDCODED DTYPE
         matrix[row_marker:(row_marker + n_in), :] = values
         row_marker += n_in
     return tf.constant(matrix, dtype=tf.float32)
 
-def linear(args, output_size, bias, bias_start=0.0, scope=None):
+def linear(args, output_size, bias, bias_start=0.0, 
+           scope=None, identity=-1):
     """
     variant of linear from tensorflow/python/ops/rnn_cell
     ... variant so I can specify the initialiser!
@@ -89,7 +98,7 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None):
 
     # Now the computation.
     with vs.variable_scope(scope or "Linear"):
-        matrix = vs.get_variable("Matrix", initializer=fixed_initializer(n_in_list, output_size))
+        matrix = vs.get_variable("Matrix", initializer=fixed_initializer(n_in_list, output_size, identity))
         if len(args) == 1:
             res = tf.matmul(args[0], matrix)
         else:
@@ -101,34 +110,14 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None):
                 initializer=tf.constant_initializer(bias_start))
     return res + bias_term
 
-def trivial(inputs, n_input, n_hidden, n_output, experiment):
-    """
-    This is just a test...
-    TODO: fix the 'trivial' cost function, turns out to be somewhat non-trivial
-    """
-    x, y = inputs
-    # parameters
-    weights = tf.Variable(tf.random_normal(shape=(n_input, n_output)), name='weights')
-    bias = tf.Variable(tf.random_normal(shape=(n_input, n_output)), name='bias')
-    # create a nonsensical but valid (hopefully) cost function
-    # THIS IS ALL TRASH
-    if experiment == 'adding':
-        # this means x is rank 3, christ almighty
-        hidden = tf.matmul(x[:, :n_input, 0], weights) + bias
-    elif experiment == 'memory':
-        # x is rank 2, but also it is integer-valued
-        # its values are INDICES
-        hidden = weights[x[:, n_input]]
-    else:
-        raise NotImplementedError
-    cost = tf.reduce_max(hidden)
-    accuracy = tf.reduce_min(hidden)
-    parameters = [weights, bias]             # list of Tensors
-    return cost, accuracy, parameters
-
-def simple_RNN(x, input_size, state_size, output_size, sequence_length):
+def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     batch_size = tf.shape(x)[0]
-    cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+    if cell_type == 'tanhRNN':
+        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+    elif cell_type == 'IRNN':
+        cell = IRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+    else: 
+        raise NotImplementedError
     state_0 = cell.zero_state(batch_size, x.dtype)
     # split up the input so the RNN can accept it...
     inputs = [tf.squeeze(input_, [1])
@@ -137,7 +126,8 @@ def simple_RNN(x, input_size, state_size, output_size, sequence_length):
     return outputs
 
 # === cells ! === #
-class tanhRNNCell(RNNCell):
+# TODO: better name for this abstract class
+class steph_RNNCell(RNNCell):
     def __init__(self, input_size, state_size, output_size):
         self._input_size = input_size
         self._state_size = state_size
@@ -155,15 +145,68 @@ class tanhRNNCell(RNNCell):
     def state_size(self):
         return self._state_size
 
+    def __call__(self):
+        """
+        Run this RNN cell on inputs, starting from the given state.
+        
+        Args:
+            inputs: 2D Tensor with shape [batch_size x self.input_size].
+            state: 2D Tensor with shape [batch_size x self.state_size].
+            scope: VariableScope for the created subgraph; defaults to class name.
+       
+       Returns:
+            A pair containing:
+            - Output: A 2D Tensor with shape [batch_size x self.output_size]
+            - New state: A 2D Tensor with shape [batch_size x self.state_size].
+        """
+        raise NotImplementedError("Abstract method")
+
+class tanhRNNCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='tanhRNN'):
         """ 
         Slightly-less-basic RNN: 
-            state = linear(previous_state, input)
+            state = tanh(linear(previous_state, input))
             output = linear(state)
         """
         with vs.variable_scope(scope):
-            new_state = tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition'))
+            new_state = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition'))
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
-#class IRNN(RNNCell):
+class IRNNCell(steph_RNNCell):
+    def __call__(self, inputs, state, scope='IRNN'):
+        """ 
+        Slightly-less-basic RNN: 
+            state = relu(linear(previous_state, input))
+            output = linear(state)
+        ... but the state linear is initialised in a special way!
+        """
+        with vs.variable_scope(scope):
+            # the identity flag says we initialize the part of the transition matrix corresponding to the 1th element of
+            # the first input to linear (a.g. [inputs, state], aka 'state') to the identity
+            new_state = tf.nn.relu(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition', identity=1))
+            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
+        return output, new_state
+
+class LSTMCell(steph_RNNCell):
+    def __call__(self, inputs, state, scope='LSTM'):
+        """
+        LSTM, oooh
+        """
+        raise NotImplementedError
+
+class complex_RNNCell(steph_RNNCell):
+    def __call__(self, inputs, state, scope='complex_RNN'):
+        """
+        complex_RNN ok
+        """
+        raise NotImplementedError
+
+class uRNN(steph_RNNCell):
+    def __call__(self, inputs, state, scope='uRNN'):
+        """
+        this unitary RNN shall be my one
+        ... but before it can exist, I will have to extend TensorFlow to include expm
+        ... fun times ahead
+        """
+        raise NotImplementedError
