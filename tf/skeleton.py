@@ -67,13 +67,11 @@ def update_step(cost, learning_rate=0.01, clipping=False):
                                     momentum=0.0)
     print 'By the way, the gradients of cost',
     print 'are with respect to the following Variables:'
-    for v in tf.trainable_variables():
-        print v.name
-    if clipping:
-        # optional clipping may occur
-        # TODO: clipping
-        pass
+    for var in tf.trainable_variables():
+        print var.name
     g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
+    if clipping:
+        g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
@@ -117,7 +115,7 @@ def main(experiment='adding', batch_size=10, state_size=20,
 
     # === ops and things === #
     cost = get_cost(outputs, y, loss_type)
-    train_op = update_step(cost)
+    train_op = update_step(cost, clipping=True)
 
     # === for checkpointing the model === #
     saver = tf.train.Saver()
