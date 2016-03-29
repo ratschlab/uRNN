@@ -110,6 +110,34 @@ def linear(args, output_size, bias, bias_start=0.0,
                 initializer=tf.constant_initializer(bias_start))
     return res + bias_term
 
+def unitary(arg, state_size, scope=None):
+    """
+    A linear map:
+        arg * U, where U = expm(sum_i lambda_i T_i)
+    where lambda_i are variables and T_i are constant Tensors given by basis
+    U is square, n x n where n == state_size
+
+    Args:
+        arg: a 2D Tensor, batch x n (NOTE: only allowing one, for now)
+            note: n must be equal to the state_size
+        state_size: int, dimension of U, must equal n
+    Returns:
+        A 2D Tensor with shape [batch x state_size] equal to arg * U
+    Raises:
+        ValueError if not arg.shape[1] == state_size
+    """
+    # assert statement here to make sure arg is a tensor etc.
+    if not arg.get_shape().as_list()[1] == state_size:
+        raise ValueError("Unitary expects shape[1] of first argument to be state size.")
+
+    with vs.variable_scope(scope or "Unitary"):
+        # SKETCHTOWN 2016
+        lambdas = vs.get_variable("Vector")     # is "vector" even a legit variable?
+        basis = # this is gonna be a list of tensors ... where does it come from?
+        U = expm(tf.matmul(lambdas, basis))     # expm not implemented :]
+        res = tf.matmul(arg, U)
+    return res
+
 def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     batch_size = tf.shape(x)[0]
     if cell_type == 'tanhRNN':
@@ -193,7 +221,7 @@ class LSTMCell(steph_RNNCell):
         """
         LSTM, oooh
         """
-         #TODO: wow everything
+        #TODO: wow everything
         raise NotImplementedError
         c_prev = array_ops.slice(state, [0, 0], [-1, self._state_size])
         m_prev = array_ops.slice(state, [0, self._state_size], [-1, num_proj])
@@ -221,4 +249,8 @@ class uRNN(steph_RNNCell):
         ... but before it can exist, I will have to extend TensorFlow to include expm
         ... fun times ahead
         """
-        raise NotImplementedError
+        with vs.variable_scope(scope):
+            # probably using sigmoid?
+            new_state = tf.nn.sigmoid(unitary(state, self._state_size, bias=False, scope='Unitary/Transition') + linear(inputs, self._state_size, bias=True, scope='Linear/Transition'))
+            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
+        return output, new_state
