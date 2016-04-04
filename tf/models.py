@@ -133,7 +133,7 @@ def unitary(arg, state_size, scope=None):
     with vs.variable_scope(scope or "Unitary"):
         # SKETCHTOWN 2016
         lambdas = vs.get_variable("Vector")     # is "vector" even a legit variable?
-        basis = # this is gonna be a list of tensors ... where does it come from?
+        basis = 0# this is gonna be a list of tensors ... where does it come from?
         U = expm(tf.matmul(lambdas, basis))     # expm not implemented :]
         res = tf.matmul(arg, U)
     return res
@@ -144,6 +144,8 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
         cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
     elif cell_type == 'IRNN':
         cell = IRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+    elif cell_type == 'LSTM':
+        cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size, x.dtype)
@@ -219,21 +221,37 @@ class IRNNCell(steph_RNNCell):
 class LSTMCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='LSTM'):
         """
-        LSTM, oooh
+        Inspired by LSTMCell in tensorflow (python/ops/rnn_cell), but modified to
+        be consistent with the version in the Theano implementation. (There are small
+        differences...)
         """
-        #TODO: wow everything
-        raise NotImplementedError
-        c_prev = array_ops.slice(state, [0, 0], [-1, self._state_size])
-        m_prev = array_ops.slice(state, [0, self._state_size], [-1, num_proj])
+        # the state is actually composed of both hidden and state parts:
+        # (so they're each half the size of the state, which will be doubled elsewhere)
+        # that is confusing nomenclature, I realise
+        hidden_size = self._state_size/2
+        state_prev = tf.slice(state, [0, 0], [-1, hidden_size])
+        hidden_prev = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+
         with vs.variable_scope(scope):
-            i = tf.sigmoid(linear([inputs, state], self._state_size, bias=True, scope='LSTM/Input'))
-            candidate = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Candidate'))
-            forget = tf.sigmoid(linear([inputs, state], self._state_size, bias=True, scope='Linear/Forget'))
-            intermediate_state = 
-            # new state
-            new_state = i * candidate + forget * state
-            # output
-        return False
+            i = tf.sigmoid(linear([inputs, hidden_prev], hidden_size, bias=True, scope='Linear/Input'))
+            candidate = tf.tanh(linear([inputs, hidden_prev], hidden_size, bias=True, scope='Linear/Candidate'))
+            forget = tf.sigmoid(linear([inputs, hidden_prev], hidden_size, bias=True, scope='Linear/Forget'))
+            
+            intermediate_state = i * candidate + forget * state_prev
+            
+            # out (not the real output, confusingly)
+            # NOTE: this differs from the LSTM implementation in TensorFlow
+            # in tf, the intermediate_state doesn't contribute
+            out = tf.sigmoid(linear([inputs, hidden_prev, intermediate_state], hidden_size, bias=True, scope='Linear/Out'))
+       
+            intermediate_hidden = out * tf.tanh(intermediate_state)
+            
+            # now for the 'actual' output
+            output = linear([intermediate_hidden], self._output_size, bias=True, scope='Linear/Output')
+            
+            # the 'state' to be fed back in (to be split up, again!)
+            new_state = tf.concat(1, [intermediate_state, intermediate_hidden])
+        return output, new_state
 
 class complex_RNNCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='complex_RNN'):

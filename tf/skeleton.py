@@ -76,8 +76,8 @@ def update_step(cost, learning_rate=0.01, clipping=False):
     return train_opt
 
 def main(experiment='adding', batch_size=10, state_size=20, 
-        num_epochs=5, T=100, learning_rate=0.001,
-        model='tanhRNN', timestamp=False):
+         num_epochs=5, T=100, learning_rate=0.001,
+         model='tanhRNN', timestamp=False):
     # === derivative options/values === #
     gradient_clipping = True
     if model == 'complex_RNN':
@@ -88,8 +88,6 @@ def main(experiment='adding', batch_size=10, state_size=20,
         identifier = identifier + '_' + str(int(time()))
     best_model_path = 'output/' + identifier + '.best_model.ckpt'
     trace_path = 'output/' + identifier + '.trace_path.pk'
-
-    # TODO: select model correctly
 
     # === create data === #
     train_data = ExperimentData(N_TRAIN, experiment, T)
