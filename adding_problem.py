@@ -159,6 +159,12 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
             data_y = s_train_y.get_value()
             s_train_y.set_value(data_y[inds,:])
 
+        # YOLO
+        for p in parameters:
+            print p.name
+            print p.get_value()
+            pdb.set_trace()
+        # DEYOLO
 
         mse = train(i % int(num_batches))
         # STEPH: remember, input of train is the batch number, 
@@ -210,7 +216,7 @@ if __name__=="__main__":
     parser.add_argument("--time_steps", type=int, default=200)
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--savefile", default='adding_test')
-    parser.add_argument("--model", default='complex_RNN')
+    parser.add_argument("--model", default='orthogonal_RNN')
     parser.add_argument("--input_type", default='real')
     parser.add_argument("--out_every_t", default='False')
     parser.add_argument("--loss_function", default='MSE')

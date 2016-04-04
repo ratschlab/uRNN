@@ -5,6 +5,7 @@ import pdb
 from fftconv import cufft, cuifft
 import numpy as np
 import theano.tensor as T
+from theano import printing
 from theano.ifelse import ifelse
 from models import *
 from optimizations import *    
@@ -78,6 +79,8 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
                                                    input_type=input_type,
                                                    out_every_t=out_every_t,
                                                    loss_function=loss_function)
+        gradients = T.grad(costs[0], parameters)
+
     elif (model == 'general_unitary_RNN'):
         # TODO: (STEPH) write general_unitary_RNN
         #   note: may want another option specifying the basis of the Lie algebra
@@ -114,9 +117,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     givens_test = {inputs[0] : s_test_x,
                    inputs[1] : s_test_y}
     
-   
-   
-    train = theano.function([index], costs[0], givens=givens, updates=updates)
+    train = theano.function([index], [costs[0], printed_V], givens=givens, updates=updates)
     test = theano.function([], [costs[0], costs[1]], givens=givens_test)
 
     # --- Training Loop ---------------------------------------------------------------
@@ -129,6 +130,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     best_test_loss = 1e6
     for i in xrange(n_iter):
         if (n_iter % num_batches == 0):
+            # STEPH: this is probably supposed to be: i % num_batches == 0 ... 
             inds = np.random.permutation(n_train)
             data_x = s_train_x.get_value()
             s_train_x.set_value(data_x[:,inds])
@@ -183,7 +185,7 @@ if __name__=="__main__":
     parser.add_argument("--time_steps", type=int, default=200)
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--savefile", default='memory_test')
-    parser.add_argument("--model", default='complex_RNN')
+    parser.add_argument("--model", default='orthogonal_RNN')
     parser.add_argument("--input_type", default='categorical')
     parser.add_argument("--out_every_t", default='True')
     parser.add_argument("--loss_function", default='CE')

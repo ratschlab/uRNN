@@ -45,25 +45,29 @@ y = tf.placeholder(xy_dtype, shape=[None] + y_shape)
 inputs = [x, y]
 
 # --- get cost and parameters --- #
-#if options.model == 'trivial':
-#    cost, parameters = models.trivial(inputs, 
-#                                      options.n_input, 
-#                                      options.n_hidden, 
-#                                      options.n_output,
-#                                      options.experiment)
-#else:
-#    raise NotImplementedError
+if options.model == 'trivial':
+    cost, accuracy, parameters = models.trivial(inputs, 
+                                                options.n_input, 
+                                                options.n_hidden, 
+                                                options.n_output,
+                                                options.experiment)
+else:
+    raise NotImplementedError
 
 # --- fold in optimizer --- #
 opt = tf.train.RMSPropOptimizer(options.learning_rate, 
                                 options.decay, 
                                 options.momentum, 
                                 options.epsilon)
-#grads_and_vars = opt.compute_gradients(cost, parameters)
+grads_and_vars = opt.compute_gradients(cost, parameters)
 if options.clipping:
     clipped_grads_and_vars = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in grads_and_vars]
     grads_and_vars = clipped_grads_and_vars
-#train_step = opt.apply_gradients(grads_and_vars)
+train_step = opt.apply_gradients(grads_and_vars)
+
+# --- init/saving --- #
+init_op = tf.initialize_all_variables()
+#saver = tf.train.Saver()
 
 # --- training loop --- #
 train_loss_trace = []
@@ -103,7 +107,8 @@ for i in xrange(options.n_iter):
             best_rms = 0 #TODO
             best_vali_loss = vali_loss
 
-        # TODO: SAVE STUFF
+#        save_path = saver.save(sess, "...")
+#        print("Model saved to %s" % save_path)
 
 # --- evaluation on test set --- #
 # TODO: evaluate best params on test set
