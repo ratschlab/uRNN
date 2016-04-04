@@ -18,7 +18,7 @@ import argparse
 from time import time
 
 # local imports
-import models
+from models import RNN
 from data import ExperimentData
 
 # === constants === #
@@ -79,6 +79,9 @@ def main(experiment='adding', batch_size=10, state_size=20,
         num_epochs=5, T=100, learning_rate=0.001,
         model='tanhRNN', timestamp=False):
     # === derivative options/values === #
+    gradient_clipping = True
+    if model == 'complex_RNN':
+        gradient_clipping = False
     num_batches = N_TRAIN / batch_size
     identifier = experiment + '_' + model + '_' + str(T)
     if timestamp:
@@ -111,11 +114,11 @@ def main(experiment='adding', batch_size=10, state_size=20,
     x, y = train_data.make_placeholders()
 
     # === model select === #
-    outputs = models.simple_RNN(x, input_size, state_size, output_size, sequence_length=sequence_length)
+    outputs = RNN(model, x, input_size, state_size, output_size, sequence_length=sequence_length)
 
     # === ops and things === #
     cost = get_cost(outputs, y, loss_type)
-    train_op = update_step(cost, clipping=True)
+    train_op = update_step(cost, learning_rate, gradient_clipping)
 
     # === for checkpointing the model === #
     saver = tf.train.Saver()
@@ -149,14 +152,10 @@ def main(experiment='adding', batch_size=10, state_size=20,
 
                     # NOTE: format consistent with theano version
                     # TODO: update alongside plotting script
-                    save_vals = {'parameters': None,
-                                 'rmsprop': None,
-                                 'train_loss': train_cost_trace,
+                    save_vals = {'train_loss': train_cost_trace,
                                  'test_loss': vali_cost_trace,
-                                 'best_params': None,
-                                 'best_rms': None,
                                  'best_test_loss': best_vali_cost,
-                                 'model': None,
+                                 'model': model,
                                  'time_steps': T}
 
                     cPickle.dump(save_vals, file(trace_path, 'wb'),
