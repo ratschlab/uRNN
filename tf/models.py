@@ -16,6 +16,33 @@ from tensorflow.models.rnn import rnn
 from tensorflow.models.rnn.rnn_cell import RNNCell, BasicRNNCell
 from tensorflow.python.ops import variable_scope as vs
 
+# === functions to help with implementing the theano version === #
+
+def times_diag(arg, state_size, scope=None):
+    with vs.variable_scope(scope or "Times_Diag"):
+        thetas = vs.get_variable("Thetas", 
+                                 np.random.uniform(low=-np.pi, 
+                                                   high=np.pi, 
+                                                   size=state_size))
+        # e(i theta)  = cos(theta) + i sin(theta)
+        # form the matrix from this
+        matrix = tf.cast(tf.diag(tf.cos(thetas)), tf.complex64) + \
+                 1j*tf.cast(tf.diag(tf.sin(thetas)), tf.compelx64)
+        # what's going on here is that diag doesn't take complex values :(
+    return tf.matmul(arg, matrix)
+
+def fft(arg):
+    raise NotImplementedError
+
+def reflection(arg, scope=None):
+    raise NotImplementedError
+
+def vec_permutation(arg, scope=None):
+    raise NotImplementedError
+
+def relu_mod(arg, scope=None):
+    raise notImplementedError
+
 def fixed_initializer(n_in_list, n_out, identity=-1):
     """
     This is a bit of a contrived initialiser to be consistent with the
@@ -59,6 +86,7 @@ def fixed_initializer(n_in_list, n_out, identity=-1):
         row_marker += n_in
     return tf.constant(matrix, dtype=tf.float32)
 
+# === more generic functions === #
 def linear(args, output_size, bias, bias_start=0.0, 
            scope=None, identity=-1):
     """
@@ -126,13 +154,14 @@ def unitary(arg, state_size, scope=None):
     Raises:
         ValueError if not arg.shape[1] == state_size
     """
+    raise NotImplementedError
     # assert statement here to make sure arg is a tensor etc.
     if not arg.get_shape().as_list()[1] == state_size:
         raise ValueError("Unitary expects shape[1] of first argument to be state size.")
 
     with vs.variable_scope(scope or "Unitary"):
         # SKETCHTOWN 2016
-        lambdas = vs.get_variable("Vector")     # is "vector" even a legit variable?
+        lambdas = vs.get_variable("Lambdas")     # is "vector" even a legit variable?
         basis = 0# this is gonna be a list of tensors ... where does it come from?
         U = expm(tf.matmul(lambdas, basis))     # expm not implemented :]
         res = tf.matmul(arg, U)
@@ -256,9 +285,23 @@ class LSTMCell(steph_RNNCell):
 class complex_RNNCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='complex_RNN'):
         """
-        complex_RNN ok
+        (copying their naming conventions, mkay)
         """
-        raise NotImplementedError
+        # TODO: times_diag, fft, reflection, vec_permutation, relu_mod
+        with vs.variable_scope(scope):
+            step1 = times_diag(h_prev, scope='Diag/First')
+            step2 = fft(step1)
+            step3 = reflection(step2, scope='Reflection/First')
+            step4 = vec_permutation(step3, scope='Permutation')
+            step5 = times_diag(step4, scope='Diag/Second')
+            step6 = ifft(step5)
+            step7 = reflection(step6, scope='Reflection/Second')
+            step8 = times_diag(step7, scope='Diag/Third')
+
+            intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
+            new_state = relu_mod(intermediate_state, bias=True, scope='ReLU_mod')
+            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
+        return output, new_state
 
 class uRNN(steph_RNNCell):
     def __call__(self, inputs, state, scope='uRNN'):
