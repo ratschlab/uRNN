@@ -21,15 +21,20 @@ from tensorflow.python.ops import variable_scope as vs
 def times_diag(arg, state_size, scope=None):
     with vs.variable_scope(scope or "Times_Diag"):
         thetas = vs.get_variable("Thetas", 
-                                 np.random.uniform(low=-np.pi, 
-                                                   high=np.pi, 
-                                                   size=state_size))
+                                 initializer=tf.constant(np.random.uniform(low=-np.pi, 
+                                                                           high=np.pi, 
+                                                                           size=state_size), 
+                                                         dtype=tf.complex64),
+                                 dtype=tf.complex64)
         # e(i theta)  = cos(theta) + i sin(theta)
         # form the matrix from this
-        matrix = tf.cast(tf.diag(tf.cos(thetas)), tf.complex64) + \
-                 1j*tf.cast(tf.diag(tf.sin(thetas)), tf.compelx64)
-        # what's going on here is that diag doesn't take complex values :(
-    return tf.matmul(arg, matrix)
+        # i am sorry about all these casts: diag doesn't take complex64
+        real_thetas = tf.cast(thetas, tf.float64)
+        matrix = tf.cast(tf.diag(tf.cos(real_thetas)), tf.complex64) + \
+                 1j*tf.cast(tf.diag(tf.sin(real_thetas)), tf.complex64)
+    # 'cast' input to complex
+    # TODO: set dtype based on model during placeholder creation
+    return tf.matmul(tf.cast(arg, tf.complex64), matrix)
 
 def fft(arg):
     raise NotImplementedError
@@ -40,7 +45,7 @@ def reflection(arg, scope=None):
 def relu_mod(arg, scope=None):
     raise notImplementedError
 
-def fixed_initializer(n_in_list, n_out, identity=-1):
+def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
     """
     This is a bit of a contrived initialiser to be consistent with the
     'initialize_matrix' function in models.py from the complex_RNN repo
@@ -81,11 +86,11 @@ def fixed_initializer(n_in_list, n_out, identity=-1):
         # NOTE: HARDCODED DTYPE
         matrix[row_marker:(row_marker + n_in), :] = values
         row_marker += n_in
-    return tf.constant(matrix, dtype=tf.float32)
+    return tf.constant(matrix, dtype=dtype)
 
 # === more generic functions === #
 def linear(args, output_size, bias, bias_start=0.0, 
-           scope=None, identity=-1):
+           scope=None, identity=-1, dtype=tf.float32):
     """
     variant of linear from tensorflow/python/ops/rnn_cell
     ... variant so I can specify the initialiser!
@@ -123,16 +128,14 @@ def linear(args, output_size, bias, bias_start=0.0,
 
     # Now the computation.
     with vs.variable_scope(scope or "Linear"):
-        matrix = vs.get_variable("Matrix", initializer=fixed_initializer(n_in_list, output_size, identity))
+        matrix = vs.get_variable("Matrix", dtype=dtype, initializer=fixed_initializer(n_in_list, output_size, identity, dtype))
         if len(args) == 1:
             res = tf.matmul(args[0], matrix)
         else:
             res = tf.matmul(tf.concat(1, args), matrix)
         if not bias:
             return res
-        bias_term = vs.get_variable(
-                "Bias", [output_size],
-                initializer=tf.constant_initializer(bias_start))
+        bias_term = vs.get_variable("Bias", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
     return res + bias_term
 
 def unitary(arg, state_size, scope=None):
@@ -172,6 +175,8 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
         cell = IRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
     elif cell_type == 'LSTM':
         cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size)
+    elif cell_type == 'complex_RNN':
+        cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size, x.dtype)
@@ -284,23 +289,29 @@ class complex_RNNCell(steph_RNNCell):
         """
         (copying their naming conventions, mkay)
         """
+        # TODO: set up data types at time of model selection
+        # (for now:) cast inputs to complex
+        inputs_complex = tf.cast(inputs, tf.complex64)
         # TODO: fft, reflection, relu_mod
         # constant permutation
         permutation = tf.constant(np.random.permutation(self._state_size), dtype=tf.int32)
         with vs.variable_scope(scope):
-            step1 = times_diag(h_prev, self._state_size, scope='Diag/First')
-            step2 = fft(step1)
-            step3 = reflection(step2, scope='Reflection/First')
-            step4 = tf.gather(step3, permutation, name='Permutation')
-            step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-            step6 = ifft(step5)
-            step7 = reflection(step6, scope='Reflection/Second')
-            step8 = times_diag(step7, self._state_size, scope='Diag/Third')
+            step1 = times_diag(state, self._state_size, scope='Diag/First')
+      #      step2 = fft(step1)
+      #      step3 = reflection(step2, scope='Reflection/First')
+      #      step4 = tf.gather(step3, permutation, name='Permutation')
+      #      step5 = times_diag(step4, self._state_size, scope='Diag/Second')
+      #      step6 = ifft(step5)
+      #      step7 = reflection(step6, scope='Reflection/Second')
+      #      step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
-            intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
-            new_state = relu_mod(intermediate_state, bias=True, scope='ReLU_mod')
-            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
-        return output, new_state
+           # intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
+            intermediate_state = linear(inputs_complex, self._state_size, bias=True, scope='Linear/Intermediate', dtype=tf.complex64) + step1
+#            new_state = relu_mod(intermediate_state, bias=True, scope='ReLU_mod')
+#            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
+            output = linear(intermediate_state, self._output_size, bias=True, scope='Linear/Output', dtype=tf.complex64)
+        #return output, new_state
+        return output, state
 
 class uRNN(steph_RNNCell):
     def __call__(self, inputs, state, scope='uRNN'):
