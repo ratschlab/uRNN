@@ -37,9 +37,6 @@ def fft(arg):
 def reflection(arg, scope=None):
     raise NotImplementedError
 
-def vec_permutation(arg, scope=None):
-    raise NotImplementedError
-
 def relu_mod(arg, scope=None):
     raise notImplementedError
 
@@ -287,16 +284,18 @@ class complex_RNNCell(steph_RNNCell):
         """
         (copying their naming conventions, mkay)
         """
-        # TODO: times_diag, fft, reflection, vec_permutation, relu_mod
+        # TODO: fft, reflection, relu_mod
+        # constant permutation
+        permutation = tf.constant(np.random.permutation(self._state_size), dtype=tf.int32)
         with vs.variable_scope(scope):
-            step1 = times_diag(h_prev, scope='Diag/First')
+            step1 = times_diag(h_prev, self._state_size, scope='Diag/First')
             step2 = fft(step1)
             step3 = reflection(step2, scope='Reflection/First')
-            step4 = vec_permutation(step3, scope='Permutation')
-            step5 = times_diag(step4, scope='Diag/Second')
+            step4 = tf.gather(step3, permutation, name='Permutation')
+            step5 = times_diag(step4, self._state_size, scope='Diag/Second')
             step6 = ifft(step5)
             step7 = reflection(step6, scope='Reflection/Second')
-            step8 = times_diag(step7, scope='Diag/Third')
+            step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
             intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
             new_state = relu_mod(intermediate_state, bias=True, scope='ReLU_mod')
