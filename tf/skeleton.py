@@ -61,6 +61,8 @@ def get_cost(outputs, y, loss_type='MSE'):
     return cost
 
 def update_step(cost, learning_rate=0.01, clipping=False):
+    print 'WARNING: RMSProp does not support complex variables!'
+    # TODO: add complex support to RMSProp
     # decay and momentum are copied from theano version values
     opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate,
                                     decay=0.9,
@@ -78,6 +80,14 @@ def update_step(cost, learning_rate=0.01, clipping=False):
 def main(experiment='adding', batch_size=10, state_size=20, 
          num_epochs=5, T=100, learning_rate=0.001,
          model='tanhRNN', timestamp=False):
+    # TESTING: YOLO TODO
+    # randomly select experiment
+    if np.random.random() < 0.5:
+        experiment = 'adding'
+    else:
+        experiment = 'memory'
+    print 'running', experiment, 'experiment'
+    # DEYOLO
     # === derivative options/values === #
     gradient_clipping = True
     if model == 'complex_RNN':
