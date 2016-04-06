@@ -19,6 +19,9 @@ from tensorflow.python.ops import variable_scope as vs
 # === functions to help with implementing the theano version === #
 
 def times_diag(arg, state_size, scope=None):
+    """
+    Multiplication with a diagonal matrix of the form exp(i theta_j)
+    """
     with vs.variable_scope(scope or "Times_Diag"):
         thetas = vs.get_variable("Thetas", 
                                  initializer=tf.constant(np.random.uniform(low=-np.pi, 
@@ -42,8 +45,19 @@ def fft(arg):
 def reflection(arg, scope=None):
     raise NotImplementedError
 
-def relu_mod(arg, scope=None):
-    raise notImplementedError
+def relu_mod(state, scope=None):
+    """
+    Rectified linear unit for complex-valued state.
+    """
+    state_size = state.get_shape()[1]
+    with vs.variable_scope(scope or "ReLU_mod"):
+        modulus = tf.complex_abs(state)
+        bias_term = vs.get_variable("Bias", dtype=tf.float32, 
+                                    initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(state_size)), 
+                                                            dtype=tf.float32, 
+                                                            shape=[state_size]))
+        rescale = tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5)
+    return state * tf.cast(rescale, tf.complex64)
 
 def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
     """
@@ -292,24 +306,24 @@ class complex_RNNCell(steph_RNNCell):
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
         inputs_complex = tf.cast(inputs, tf.complex64)
-        # TODO: fft, reflection, relu_mod
-        # constant permutation
+        # TODO: fft, reflection
+        # constant permutation (and yes, all that transpose nonsense is necessary)
         permutation = tf.constant(np.random.permutation(self._state_size), dtype=tf.int32)
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
       #      step2 = fft(step1)
       #      step3 = reflection(step2, scope='Reflection/First')
-      #      step4 = tf.gather(step3, permutation, name='Permutation')
-      #      step5 = times_diag(step4, self._state_size, scope='Diag/Second')
+            step4 = tf.transpose(tf.gather(tf.transpose(step1), permutation, name='Permutation'))
+            step5 = times_diag(step4, self._state_size, scope='Diag/Second')
       #      step6 = ifft(step5)
       #      step7 = reflection(step6, scope='Reflection/Second')
-      #      step8 = times_diag(step7, self._state_size, scope='Diag/Third')
+            step8 = times_diag(step5, self._state_size, scope='Diag/Third')
 
            # intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
-            intermediate_state = linear(inputs_complex, self._state_size, bias=True, scope='Linear/Intermediate', dtype=tf.complex64) + step1
-#            new_state = relu_mod(intermediate_state, bias=True, scope='ReLU_mod')
-#            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
-            output = linear(intermediate_state, self._output_size, bias=True, scope='Linear/Output', dtype=tf.complex64)
+            intermediate_state = linear(inputs_complex, self._state_size, bias=True, scope='Linear/Intermediate', dtype=tf.complex64) + step8
+            new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+            real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
+            output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
         #return output, new_state
         return output, state
 
