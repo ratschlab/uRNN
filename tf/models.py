@@ -336,7 +336,9 @@ class complex_RNNCell(steph_RNNCell):
             step2 = tf.fft2d(step1, name='FFT')
             step3 = reflection(step2, self._state_size, scope='Reflection/First')
             # transpose stuff required as tf.gather only acts on the first dimension:
-            permutation = vs.get_variable("Permutation", dtype=tf.int32, initializer=tf.constant(np.random.permutation(self._state_size)))
+            permutation = vs.get_variable("Permutation", dtype=tf.int32, 
+                                          initializer=tf.constant(np.random.permutation(self._state_size), dtype=tf.int32),
+                                          trainable=False)
             step4 = tf.transpose(tf.gather(tf.transpose(step3), permutation, name='Permutation'))
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
             step6 = tf.ifft2d(step5, name='InverseFFT')
