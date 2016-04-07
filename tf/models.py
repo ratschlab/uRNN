@@ -17,6 +17,7 @@ from tensorflow.models.rnn.rnn_cell import RNNCell, BasicRNNCell
 from tensorflow.python.ops import variable_scope as vs
 
 # === functions to help with implementing the theano version === #
+# from http://arxiv.org/abs/1511.06464
 
 def times_diag(arg, state_size, scope=None):
     """
@@ -48,6 +49,7 @@ def reflection(arg, scope=None):
 def relu_mod(state, scope=None):
     """
     Rectified linear unit for complex-valued state.
+    (Equation 8 in http://arxiv.org/abs/1511.06464)
     """
     state_size = state.get_shape()[1]
     with vs.variable_scope(scope or "ReLU_mod"):
