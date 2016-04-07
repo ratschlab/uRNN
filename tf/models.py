@@ -43,8 +43,25 @@ def times_diag(arg, state_size, scope=None):
 def fft(arg):
     raise NotImplementedError
 
-def reflection(arg, scope=None):
-    raise NotImplementedError
+def reflection(state, state_size, scope=None):
+    """
+    I do not entirely trust or believe the reflection operator in the theano version,
+    so this is a shell for now.
+    """
+    # the reflections are initialised in a weird and tricky way: using initialize_matrix,
+    # as if they are columns from a (2, state_size) matrix, so the range of random initialisation
+    # is informed by both... but then my fixed_initializer function would return an incorrectly-sized
+    # reflection, so I'm just going to do it manually.
+    scale = np.sqrt(6.0/ (2 + state_size*2))
+    with vs.variable_scope(scope or "Reflection"):
+        reflection = vs.get_variable("Reflection", dtype=tf.complex64,
+                                     initializer=tf.constant(np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))) +\
+                                                             1j*np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))),
+                                                             dtype=tf.complex64,
+                                                             shape=[state_size, 1]))
+        # FOR NOW THIS IS IT
+        # TODO: finish
+    return tf.mul(state, reflection)
 
 def relu_mod(state, scope=None):
     """
@@ -88,7 +105,11 @@ def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
     Well, it is possibly useful to initialise the weights associated with the internal state
     to be the identity. (Specifically, this is done in the IRNN case.)
     So if identity is >0, then it specifies which part of n_in_list (corresponding to a segment
-    of the resulting matrix) sholud be initialised to identity, and not uniformly randomly as the rest.
+    of the resulting matrix) should be initialised to identity, and not uniformly randomly as the rest.
+
+    TODO: complex flag.
+    It has occurred to me that the n_out etc. _sizes_ in this function are for the _real dimension_ of
+    the matrix, so when we're initialising with complex values we need to account for that.
     """
     matrix = np.empty(shape=(sum(n_in_list), n_out))
     row_marker = 0
@@ -314,12 +335,12 @@ class complex_RNNCell(steph_RNNCell):
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
       #      step2 = fft(step1)
-      #      step3 = reflection(step2, scope='Reflection/First')
-            step4 = tf.transpose(tf.gather(tf.transpose(step1), permutation, name='Permutation'))
+            step3 = reflection(step1, self._state_size, scope='Reflection/First')
+            step4 = tf.transpose(tf.gather(tf.transpose(step3), permutation, name='Permutation'))
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
       #      step6 = ifft(step5)
-      #      step7 = reflection(step6, scope='Reflection/Second')
-            step8 = times_diag(step5, self._state_size, scope='Diag/Third')
+            step7 = reflection(step5, self._state_size, scope='Reflection/Second')
+            step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
            # intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
             intermediate_state = linear(inputs_complex, self._state_size, bias=True, scope='Linear/Intermediate', dtype=tf.complex64) + step8
