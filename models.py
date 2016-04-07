@@ -56,31 +56,131 @@ def times_diag(input, n_hidden, diag, swap_re_im):
 def vec_permutation(input, index_permute):
     return input[:, index_permute]      
 
-    
-def times_reflection(input, n_hidden, reflection):
-    input_re = input[:, :n_hidden]
-    input_im = input[:, n_hidden:]
-    reflect_re = reflection[:n_hidden]
-    reflect_im = reflection[n_hidden:]
    
+def times_reflection(input, n_hidden, reflection):
+    # comments here are Steph working through the maths
+    # OK so the equation they give is:
+    #   (I - 2 outer(v, v*)/|v|**2) h
+    # (v is the reflection, h is the input)
+    # this gets us to: (using Einstein notation)
+    #   h_i - (2/|v|**2) v_i v*_j h_j
+    # Looking at the final few lines of this function, what we would like to
+    # show is: (since :n_hidden is the imaginary part of the output tensor)
+    #       re(v_i v*_j h_j) = d - c
+    #       im(v_i v*_j h_j) = a + b
+    #
+    # v = mu + i nu
+    # h = alpha + i beta
+    # v_i v*_j h_j = (mu_i + i nu_i) (mu_j - i nu_j) (alpha_j + i beta_j)
+    #       = (mu_i mu_j - i mu_i nu_j + i nu_i mu_j + nu_i nu_j) (alpha_j + i beta_j)
+    #       = (mu_i mu_j alpha_j + i mu_i mu_j beta_j +
+    #          -i mu_i nu_j alpha_j + mu_i nu_j beta_j +
+    #           i nu_i mu_j alpha_j - nu_i mu_j beta_j +
+    #             nu_i nu_j alpha_j + i nu_i nu_j beta_j) = K
+    #
+    # What an expression!
+    # Let's split it up:
+    # re(K) = (mu_i mu_j alpha_j + mu_i nu_j beta_j +
+    #          -nu_i mu_j beta_j + nu_i nu_j alpha_j)
+    # im(K) = (mu_i mu_j beta_j - mu_i nu_j alpha_j +
+    #          + nu_i mu_j alpha_j + nu_i nu_j beta_j)
+    #
+    # Now let's replace the scalar parts (the repeated js...)
+    # αμ = alpha_j mu_j
+    # αν = alpha_j nu_j
+    # βμ = beta_j mu_j
+    # βν = beta_j nu_j
+    #
+    # re(K) = (mu_i αμ + mu_i βν - nu_i βμ + nu_i αν )
+    # im(K) = (mu_i βμ - mu_i αν + nu_i αμ + nu_i βν )
+    #
+    # Simplifying further...
+    #
+    # re(K) = mu_i ( αμ + βν ) - nu_i ( βμ - αν ) = nope - nope
+    # im(K) = mu_i ( βμ - αν ) + nu_i ( αμ + βν ) = nope + nope
+    #
+    # Jumping ahead (see below) to the definitions of a, b, c, d...
+    #
+    # a = mu_i ( αμ - βν )
+    # b = nu_i ( αν + βμ )
+    # c = nu_i ( αμ - βν )
+    # d = mu_i ( αν + βμ )
+    #
+    # And so:
+    # d - c = mu_i ( αν + βμ ) - nu_i ( αμ - βν )
+    # a + b = mu_i ( αμ - βν ) + nu_i ( αν + βμ )
+    #
+    # ... huh, what is going on?
+    # ... double-checking my maths!
+    # ... double-checking their maths!
+    # ... looks OK?
+    # ... will need to TRIPLE-check my maths when it's not 1am.
+    #
+    # Possibility: when they used a * in the paper, they meant *transpose*
+    # and not *conjugate transpose*...
+    #
+    # This would result in...
+    #
+    # v_i v_j h_j = (mu_i + i nu_i) (mu_j + i nu_j) (alpha_j + i beta_j)
+    #       = (mu_i mu_j + i mu_i nu_j + i nu_i mu_j - nu_i nu_j) (alpha_j + i beta_j)
+    #       = (mu_i mu_j alpha_j + i mu_i mu_j beta_j +
+    #          + i mu_i nu_j alpha_j - mu_i nu_j beta_j +
+    #           i nu_i mu_j alpha_j - nu_i mu_j beta_j +
+    #           - nu_i nu_j alpha_j - i nu_i nu_j beta_j) = J
+    #
+    # re(J) = (mu_i mu_j alpha_j - mu_i nu_j beta_j +
+    #          - nu_i mu_j beta_j - nu_i nu_j alpha_j)
+    # im(J) = (mu_i mu_j beta_j + mu_i nu_j alpha_j +
+    #            nu_i mu_j alpha_j - nu_i nu_j beta_j)
+    #
+    # Replacing scalar parts...
+    # re(J) = mu_i αμ - mu_i βν - nu_i βμ - nu_i αν
+    # im(J) = mu_i βμ + mu_i αν + nu_i αμ - nu_i βν
+    #
+    # Further simplifying...
+    #
+    # re(J) = mu_i ( αμ - βν ) - nu_i ( βμ + αν ) = a - b
+    # im(J) = mu_i ( βμ + αν ) + nu_i ( αμ - βν ) = d + c
+    #
+    # ... closer but NOT THE SAME
+    # WHAT IS GOING ON HERE?
+
+    input_re = input[:, :n_hidden]
+    # alpha
+    input_im = input[:, n_hidden:]
+    # beta
+    reflect_re = reflection[:n_hidden]
+    # mu
+    reflect_im = reflection[n_hidden:]
+    # nu
+
     vstarv = (reflection**2).sum()
-    
+
+    # (the following things are roughly scalars)
+    # (they actually are as long as the batch size, e.g. input[0])
     input_re_reflect_re = T.dot(input_re, reflect_re)
+    # αμ
     input_re_reflect_im = T.dot(input_re, reflect_im)
+    # αν
     input_im_reflect_re = T.dot(input_im, reflect_re)
+    # βμ
     input_im_reflect_im = T.dot(input_im, reflect_im)
+    # βν
 
     a = T.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
+    # outer(αμ - βν, mu)
     b = T.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
+    # outer(αν + βμ, nu)
     c = T.outer(input_re_reflect_re - input_im_reflect_im, reflect_im)
+    # outer(αμ - βν, nu)
     d = T.outer(input_re_reflect_im + input_im_reflect_re, reflect_re)
-         
+    # outer(αν + βμ, mu)
+
     output = input
     output = T.inc_subtensor(output[:, :n_hidden], - 2. / vstarv * (a + b))
     output = T.inc_subtensor(output[:, n_hidden:], - 2. / vstarv * (d - c))
 
-    return output    
-
+    return output
 
 def compute_cost_t(lin_output, loss_function, y_t):
     if loss_function == 'CE':
