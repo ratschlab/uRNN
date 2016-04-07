@@ -43,19 +43,19 @@ def get_cost(outputs, y, loss_type='MSE'):
         y is a Tensor of shape (batch_size, output_size)
     """
     if loss_type == 'MSE':
+        # mean squared error
         # discount all but the last of the outputs
         output = outputs[-1]
         # now this object is shape batch_size, output_size
         cost = tf.reduce_mean(tf.sub(output, y) ** 2)
     elif loss_type == 'CE':
-        # TODO: this is returning a list rather than a single value: fix
-        #ok, cross-entropy!
+        # cross entropy
         # (there may be more efficient ways to do this)
         cost = tf.zeros([1])
         for (i, output) in enumerate(outputs):
             cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, y[:, i])
             cost = tf.add(cost, tf.reduce_mean(cross_entropy))
-        cost = tf.div(cost, i + 1)
+        cost = tf.squeeze(tf.div(cost, i + 1))
     else:
         raise NotImplementedError
     return cost
