@@ -329,17 +329,18 @@ class complex_RNNCell(steph_RNNCell):
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
         inputs_complex = tf.cast(inputs, tf.complex64)
-        # TODO: fft, reflection
-        # constant permutation (and yes, all that transpose nonsense is necessary)
-        permutation = tf.constant(np.random.permutation(self._state_size), dtype=tf.int32)
+        # TODO: fix reflection
+        # TODO: fix fixed_initialiser
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
-      #      step2 = fft(step1)
-            step3 = reflection(step1, self._state_size, scope='Reflection/First')
+            step2 = tf.fft2d(step1, name='FFT')
+            step3 = reflection(step2, self._state_size, scope='Reflection/First')
+            # transpose stuff required as tf.gather only acts on the first dimension:
+            permutation = vs.get_variable("Permutation", dtype=tf.int32, initializer=tf.constant(np.random.permutation(self._state_size)))
             step4 = tf.transpose(tf.gather(tf.transpose(step3), permutation, name='Permutation'))
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-      #      step6 = ifft(step5)
-            step7 = reflection(step5, self._state_size, scope='Reflection/Second')
+            step6 = tf.ifft2d(step5, name='InverseFFT')
+            step7 = reflection(step6, self._state_size, scope='Reflection/Second')
             step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
            # intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
