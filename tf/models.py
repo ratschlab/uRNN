@@ -28,14 +28,13 @@ def times_diag(arg, state_size, scope=None):
                                  initializer=tf.constant(np.random.uniform(low=-np.pi, 
                                                                            high=np.pi, 
                                                                            size=state_size), 
-                                                         dtype=tf.complex64),
-                                 dtype=tf.complex64)
+                                                         dtype=tf.float32),
+                                 dtype=tf.float32)
         # e(i theta)  = cos(theta) + i sin(theta)
         # form the matrix from this
         # i am sorry about all these casts: diag doesn't take complex64
-        real_thetas = tf.cast(thetas, tf.float64)
-        matrix = tf.cast(tf.diag(tf.cos(real_thetas)), tf.complex64) + \
-                 1j*tf.cast(tf.diag(tf.sin(real_thetas)), tf.complex64)
+        matrix = tf.cast(tf.diag(tf.cos(thetas)), tf.complex64) + \
+                 1j*tf.cast(tf.diag(tf.sin(thetas)), tf.complex64)
     # 'cast' input to complex
     # TODO: set dtype based on model during placeholder creation
     return tf.matmul(tf.cast(arg, tf.complex64), matrix)
@@ -339,6 +338,7 @@ class complex_RNNCell(steph_RNNCell):
             permutation = vs.get_variable("Permutation", dtype=tf.int32, 
                                           initializer=tf.constant(np.random.permutation(self._state_size), dtype=tf.int32),
                                           trainable=False)
+            # ALERT: TODO: WHAT: this breaks gradients
             step4 = tf.transpose(tf.gather(tf.transpose(step3), permutation, name='Permutation'))
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
             step6 = tf.ifft2d(step5, name='InverseFFT')
