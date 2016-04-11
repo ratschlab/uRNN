@@ -31,13 +31,9 @@ def times_diag(arg, state_size, scope=None):
                                                          dtype=tf.float32),
                                  dtype=tf.float32)
         # e(i theta)  = cos(theta) + i sin(theta)
-        # form the matrix from this
-        # i am sorry about all these casts: diag doesn't take complex64
-        matrix = tf.cast(tf.diag(tf.cos(thetas)), tf.complex64) + \
-                 1j*tf.cast(tf.diag(tf.sin(thetas)), tf.complex64)
-    # 'cast' input to complex
-    # TODO: set dtype based on model during placeholder creation
-    return tf.matmul(tf.cast(arg, tf.complex64), matrix)
+        diagonal = tf.complex(tf.cos(thetas), tf.sin(thetas))
+        # don't actually need to do matrix multiplication, since it's diagonal (so element-wise)
+    return tf.mul(arg, diagonal)
 
 def fft(arg):
     raise NotImplementedError
@@ -53,11 +49,23 @@ def reflection(state, state_size, scope=None):
     # reflection, so I'm just going to do it manually.
     scale = np.sqrt(6.0/ (2 + state_size*2))
     with vs.variable_scope(scope or "Reflection"):
-        reflection = vs.get_variable("Reflection", dtype=tf.complex64,
-                                     initializer=tf.constant(np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))) +\
-                                                             1j*np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))),
-                                                             dtype=tf.complex64,
-                                                             shape=[state_size, 1]))
+        # === option 1: fully complex reflection === #
+        # (runs into problems with RMSProp)
+        #reflection = vs.get_variable("Reflection", dtype=tf.complex64,
+        #                             initializer=tf.constant(np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))) +\
+        #                                                     1j*np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))),
+        #                                                     dtype=tf.complex64,
+        #                                                     shape=[state_size, 1]))
+        # === option 2: separate real and imaginary parts === #
+        reflection_re = vs.get_variable("Reflection/Real", dtype=tf.float32,
+                                        initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
+                                                                dtype=tf.float32,
+                                                                shape=[state_size]))
+        reflection_im = vs.get_variable("Reflection/Imaginary", dtype=tf.float32,
+                                        initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
+                                                                dtype=tf.float32,
+                                                                shape=[state_size]))
+        reflection= tf.complex(reflection_re, reflection_im, name="Reflection/Complex")
         # FOR NOW THIS IS IT
         # TODO: finish
     return tf.mul(state, reflection)
@@ -69,13 +77,16 @@ def relu_mod(state, scope=None):
     """
     state_size = state.get_shape()[1]
     with vs.variable_scope(scope or "ReLU_mod"):
-        modulus = tf.complex_abs(state)
+        # WARNING: complex_abs has no gradient registered in the docker version for some reason
+        # [[ LookupError: No gradient defined for operation 'RNN/complex_RNN_99/ReLU_mod/ComplexAbs' (op type: ComplexAbs) ]]
+        #modulus = tf.complex_abs(state)
+        modulus = tf.sqrt(tf.real(state)**2 + tf.imag(state)**2)
         bias_term = vs.get_variable("Bias", dtype=tf.float32, 
                                     initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(state_size)), 
                                                             dtype=tf.float32, 
                                                             shape=[state_size]))
-        rescale = tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5)
-    return state * tf.cast(rescale, tf.complex64)
+        rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0)
+    return state * rescale
 
 def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
     """
@@ -131,14 +142,15 @@ def linear(args, output_size, bias, bias_start=0.0,
     variant of linear from tensorflow/python/ops/rnn_cell
     ... variant so I can specify the initialiser!
 
-    Original docstring:
     Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
     Args:
-        args: a 2D Tensor or a list of 2D, batch x n, Tensors.
-        output_size: int, second dimension of W[i].
-        bias: boolean, whether to add a bias term or not.
-        bias_start: starting value to initialize the bias; 0 by default.
-        scope: VariableScope for the created subgraph; defaults to "Linear".
+        args:           a 2D Tensor or a list of 2D, batch x n, Tensors.
+        output_size:    int, second dimension of W[i].
+        bias:           boolean, whether to add a bias term or not.
+        bias_start:     starting value to initialize the bias; 0 by default.
+        scope:          VariableScope for the created subgraph; defaults to "Linear".
+        identity:       which matrix corresponding to inputs should be initialised to identity?
+        dtype:          data type of linear operators
     Returns:
         A 2D Tensor with shape [batch x output_size] equal to
         sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
@@ -206,16 +218,16 @@ def unitary(arg, state_size, scope=None):
 def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     batch_size = tf.shape(x)[0]
     if cell_type == 'tanhRNN':
-        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     elif cell_type == 'IRNN':
-        cell = IRNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+        cell = IRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     elif cell_type == 'LSTM':
-        cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size)
+        cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
     elif cell_type == 'complex_RNN':
-        cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size)
+        cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
     else: 
         raise NotImplementedError
-    state_0 = cell.zero_state(batch_size, x.dtype)
+    state_0 = cell.zero_state(batch_size)
     # split up the input so the RNN can accept it...
     inputs = [tf.squeeze(input_, [1])
             for input_ in tf.split(1, sequence_length, x)]
@@ -225,10 +237,11 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
 # === cells ! === #
 # TODO: better name for this abstract class
 class steph_RNNCell(RNNCell):
-    def __init__(self, input_size, state_size, output_size):
+    def __init__(self, input_size, state_size, output_size, state_dtype):
         self._input_size = input_size
         self._state_size = state_size
         self._output_size = output_size
+        self._state_dtype = state_dtype
 
     @property
     def input_size(self):
@@ -241,6 +254,27 @@ class steph_RNNCell(RNNCell):
     @property
     def state_size(self):
         return self._state_size
+
+    @property
+    def state_dtype(self):
+        return self._state_dtype
+
+    def zero_state(self, batch_size, dtype=None):
+        """
+        Return state tensor (shape [batch_size x state_size]) filled with 0.
+
+        Args:
+            batch_size:     int, float, or unit Tensor representing the batch size.
+            dtype:          the data type to use for the state
+                            (optional, if None use self.state_dtype)
+        Returns:
+            A 2D Tensor of shape [batch_size x state_size] filled with zeros.
+        """
+        if dtype is None:
+            dtype = self.state_dtype
+        zeros = tf.zeros(tf.pack([batch_size, self.state_size]), dtype=dtype)
+        zeros.set_shape([None, self.state_size])
+        return zeros
 
     def __call__(self):
         """
@@ -327,31 +361,34 @@ class complex_RNNCell(steph_RNNCell):
         """
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
-        inputs_complex = tf.cast(inputs, tf.complex64)
+        inputs_complex = tf.complex(inputs, 0)
         # TODO: fix reflection
         # TODO: fix fixed_initialiser
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
-            step2 = tf.fft2d(step1, name='FFT')
+#            step2 = tf.fft2d(step1, name='FFT')
+            step2 = step1
             step3 = reflection(step2, self._state_size, scope='Reflection/First')
-            # transpose stuff required as tf.gather only acts on the first dimension:
-            permutation = vs.get_variable("Permutation", dtype=tf.int32, 
-                                          initializer=tf.constant(np.random.permutation(self._state_size), dtype=tf.int32),
+            permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
+                                          initializer=tf.complex(np.random.permutation(np.eye(self._state_size)), 0),
                                           trainable=False)
-            # ALERT: TODO: WHAT: this breaks gradients
-            step4 = tf.transpose(tf.gather(tf.transpose(step3), permutation, name='Permutation'))
+            step4 = tf.matmul(step3, permutation)
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-            step6 = tf.ifft2d(step5, name='InverseFFT')
+#            step6 = tf.ifft2d(step5, name='InverseFFT')
+            step6 = step5
             step7 = reflection(step6, self._state_size, scope='Reflection/Second')
             step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
-           # intermediate_state = linear(inputs, self._state_size, bias=True, scope='Linear/Intermediate') + step8
-            intermediate_state = linear(inputs_complex, self._state_size, bias=True, scope='Linear/Intermediate', dtype=tf.complex64) + step8
+            # (folding in the input data) 
+            foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real', dtype=tf.float32)
+            foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary', dtype=tf.float32)
+            intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + step8
+            
             new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+            
             real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
             output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
-        #return output, new_state
-        return output, state
+        return output, new_state
 
 class uRNN(steph_RNNCell):
     def __call__(self, inputs, state, scope='uRNN'):
