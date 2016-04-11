@@ -35,9 +35,6 @@ def times_diag(arg, state_size, scope=None):
         # don't actually need to do matrix multiplication, since it's diagonal (so element-wise)
     return tf.mul(arg, diagonal)
 
-def fft(arg):
-    raise NotImplementedError
-
 def reflection(state, state_size, scope=None):
     """
     I do not entirely trust or believe the reflection operator in the theano version,
@@ -135,6 +132,61 @@ def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
         row_marker += n_in
     return tf.constant(matrix, dtype=dtype)
 
+# === functions for use with the general unitary RNN (my thing) === #
+
+def lie_algebra_basis(n):
+    """
+    Generate a basis of the Lie algebra u(n), associated to the Lie group U(n) of n x n unitary matrices.
+    The Lie algebra u(n) is n x n skew-Hermitian matrices. 
+    A skew-Hermitian matrix is a square complex matrix A such that A^{dagger} = -A
+    This means that conj(A_ij) = -A_ji
+    The Lie algebra has real dimension n^2.
+
+    One construction for the basis is as follows:
+    - the first n elements are:
+        diag(..., i, ...) (i in the nth position)
+        ... Since diag(...)^T = diag(...) and conj(i) = -i
+    - the next n(n-1)/2 elements are:
+        a = 1..n, b = a..n, A_ab = 1, A_ba = -1
+        ... Since real, so we just need A^T = -A
+    - the next n(n-1)/2 elements are:
+        a = 1..n, b = a..n, A_ab = i, A_ba = i
+        ... Since imaginary, so we just need A^T = A
+    
+    Note that I will construct the real and imaginary parts separatey, and join them at the end as a tf.tensor.
+
+    Args:
+        n: see above
+    Returns:
+        A 3D Tensor with shape [n^2, n, n], a list of the n^2 basis matrices of the Lie algebra.
+    
+    TODO: double-check all the maths here
+    """
+    print n
+    lie_algebra_dim = n*n
+    tensor_re = np.zeros(shape=(lie_algebra_dim, n, n), dtype=np.float32)
+    tensor_im = np.zeros(shape=(lie_algebra_dim, n, n), dtype=np.float32)
+    # first n elements
+    for e in xrange(0, n):
+        tensor_im[e, e, e] = 1
+    for e in xrange(n, n + (n * (n - 1) / 2)):
+        for i in xrange(0, n):
+            for j in xrange(i + 1, n):
+                tensor_re[e, i, j] = 1
+                tensor_re[e, j, i] = -1
+    for e in xrange(n + (n * (n - 1) / 2), n*n):
+        for i in xrange(0, n):
+            for j in xrange(i + 1, n):
+                tensor_im[e, i, j] = 1
+                tensor_im[e, j, i] = 1
+
+    # ensure they are indeed skew-Hermitian
+    A = tensor_re + 1j*tensor_im 
+    for basis_matrix in A:
+        assert np.array_equal(np.transpose(np.conjugate(basis_matrix)), -basis_matrix)
+        
+    return tf.complex(tensor_re, tensor_im)
+
 # === more generic functions === #
 def linear(args, output_size, bias, bias_start=0.0, 
            scope=None, identity=-1, dtype=tf.float32):
@@ -207,11 +259,20 @@ def unitary(arg, state_size, scope=None):
     if not arg.get_shape().as_list()[1] == state_size:
         raise ValueError("Unitary expects shape[1] of first argument to be state size.")
 
+    # TODO: 
+    #   initializer for lambdas
+    lie_algebra_dim = state_size*state_size
     with vs.variable_scope(scope or "Unitary"):
-        # SKETCHTOWN 2016
-        lambdas = vs.get_variable("Lambdas")     # is "vector" even a legit variable?
-        basis = 0# this is gonna be a list of tensors ... where does it come from?
-        U = expm(tf.matmul(lambdas, basis))     # expm not implemented :]
+        lambdas = vs.get_variable("Lambdas", dtype=tf.float32, shape=[1, lie_algebra_dim],
+                                  initializer=tf.random_normal_initializer())
+        # basis is fixed                                 
+        basis = vs.get_variable("Basis", dtype=tf.complex64,
+                                initializer=lie_algebra_basis(state_size), trainable=False)
+        complex_lambdas = tf.complex(lambdas, 0)
+        # TODO: make this work, np.tensordot etc...
+        U = tf.matmul(complex_lambdas, basis)
+        # TODO: bring this back
+#        U = expm(tf.matmul(lambdas, basis))     # expm not implemented :]
         res = tf.matmul(arg, U)
     return res
 
@@ -225,6 +286,8 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
         cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
     elif cell_type == 'complex_RNN':
         cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
+    elif cell_type == 'uRNN':
+        cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size)
@@ -390,7 +453,7 @@ class complex_RNNCell(steph_RNNCell):
             output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
-class uRNN(steph_RNNCell):
+class uRNNCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='uRNN'):
         """
         this unitary RNN shall be my one
@@ -399,6 +462,6 @@ class uRNN(steph_RNNCell):
         """
         with vs.variable_scope(scope):
             # probably using sigmoid?
-            new_state = tf.nn.sigmoid(unitary(state, self._state_size, bias=False, scope='Unitary/Transition') + linear(inputs, self._state_size, bias=True, scope='Linear/Transition'))
+            new_state = tf.nn.sigmoid(unitary(state, self._state_size, scope='Unitary/Transition') + linear(inputs, self._state_size, bias=True, scope='Linear/Transition'))
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
