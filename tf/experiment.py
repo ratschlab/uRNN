@@ -70,7 +70,7 @@ def update_step(cost, learning_rate=0.01, clipping=False):
     print 'By the way, the gradients of cost',
     print 'are with respect to the following Variables:'
     for var in tf.trainable_variables():
-        print var.name
+        print var.name, var.dtype
     g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
@@ -143,7 +143,7 @@ def main(experiment='adding', batch_size=10, state_size=20,
             for batch_index in xrange(num_batches):
                 # definitely scope for fancy iterator but yolo
                 batch_x, batch_y = train_data.get_batch(batch_index, batch_size)
-             
+            
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
                 print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
