@@ -12,7 +12,6 @@ import numpy as np
 import pdb
 
 from tensorflow.models.rnn import rnn
-# for testing and learning
 from tensorflow.models.rnn.rnn_cell import RNNCell
 from tensorflow.python.ops import variable_scope as vs
 
@@ -134,7 +133,7 @@ def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
 
 # === functions for use with the general unitary RNN (my thing) === #
 
-def lie_algebra_element(n, lambdas):
+def lie_algebra_element(n, lambdas, sparse=False):
     """
     Explicitly construct an element of a Lie algebra, assuming 'default' basis,
     given a set of coefficients (lambdas).
@@ -161,48 +160,99 @@ def lie_algebra_element(n, lambdas):
     lie_algebra_dim = n*n
     assert lambdas.get_shape().as_list() == [1, lie_algebra_dim]
 
-    # init #
-    L_re = tf.zeros(shape=[n, n], dtype=tf.float32)
-    L_im = tf.zeros(shape=[n, n], dtype=tf.float32)
-
-    # === useful things === #
     flat_lambdas = tf.squeeze(lambdas)
-    pdb.set_trace()
-    indices_diag = [[i, i] for i in xrange(n)]
-    indices_upper = [[i, j] for i in xrange(n) for j in xrange(i + 1, n)]
-    indices_lower = [[j, i] for i in xrange(n) for j in xrange(i + 1, n)]
     L_shape = [n, n]
 
-    # === construct two sparse tensors! === #
+    if sparse:
+        print 'ERROR: This function requires gradient for SparseToDense. Does not yet exist.'
+        raise NotImplementedError
 
-    # == imaginary == #
-    # all positive, so we don't need to change the values at all
-    # values along diagonal
-    values_im_diag = tf.slice(flat_lambdas, [0], [n])
-    # off-diagonal values (twice)
-    values_im_rest = tf.slice(flat_lambdas, [n], [(n * (n - 1) / 2)])
-    values_im = tf.concat(0, [values_im_diag, values_im_rest, values_im_rest])
-    # indices, now (this is not the most efficient or elegant but it mirrors basis-creation function)
-    indices_im = indices_diag + indices_upper + indices_lower
-    # create tensor
-    L_im_sparse = tf.SparseTensor(indices_im, values_im, L_shape)
-    L_im_reorder = tf.sparse_reorder(L_im_sparse)
-    L_im = tf.sparse_tensor_to_dense(L_im_reorder)
+        # === useful things === #
+        indices_diag = [[i, i] for i in xrange(n)]
+        indices_upper = [[i, j] for i in xrange(n) for j in xrange(i + 1, n)]
+        indices_lower = [[j, i] for i in xrange(n) for j in xrange(i + 1, n)]
 
-    # == real == #
-    # need positive and negative versions of the values
-    values_re_pos = tf.slice(flat_lambdas, [n + (n * (n - 1) / 2)], [n * (n - 1) / 2])
-    values_re = tf.concat(0, [values_re_pos, tf.neg(values_re_pos)])
-    # have to make sure the neg and pos values get the correct indices!
-    indices_re = indices_upper + indices_lower
-    # create tensor
-    L_re_sparse = tf.SparseTensor(indices_re, values_re, L_shape)
-    L_re_reorder = tf.sparse_reorder(L_re_sparse)
-    L_re = tf.sparse_tensor_to_dense(L_re_reorder)
+        # === construct two sparse tensors! === #
+        # == imaginary == #
+        # all positive, so we don't need to change the values at all
+        # values along diagonal
+        values_im_diag = tf.slice(flat_lambdas, [0], [n])
+        # off-diagonal values (twice)
+        values_im_rest = tf.slice(flat_lambdas, [n], [(n * (n - 1) / 2)])
+        values_im = tf.concat(0, [values_im_diag, values_im_rest, values_im_rest])
+        # indices, now (this is not the most efficient or elegant but it mirrors basis-creation function)
+        indices_im = indices_diag + indices_upper + indices_lower
+        # create tensor
+        L_im_sparse = tf.SparseTensor(indices_im, values_im, L_shape)
+        L_im_reorder = tf.sparse_reorder(L_im_sparse)
+        # NOTE: ERROR: No gradient defined for operation ... (op type: SparseToDense)
+        L_im = tf.sparse_tensor_to_dense(L_im_reorder)
+
+        # == real == #
+        # need positive and negative versions of the values
+        values_re_pos = tf.slice(flat_lambdas, [n + (n * (n - 1) / 2)], [n * (n - 1) / 2])
+        values_re = tf.concat(0, [values_re_pos, tf.neg(values_re_pos)])
+        # have to make sure the neg and pos values get the correct indices!
+        indices_re = indices_upper + indices_lower
+        # create tensor
+        L_re_sparse = tf.SparseTensor(indices_re, values_re, L_shape)
+        L_re_reorder = tf.sparse_reorder(L_re_sparse)
+        # NOTE: ERROR: No gradient defined for operation ... (op type: SparseToDense)
+        L_re = tf.sparse_tensor_to_dense(L_re_reorder)
+    else:
+        # *without* sparse tensors!
+        # == init == #
+        L_re = tf.zeros(shape=[n, n], dtype=tf.float32)
+        L_im = tf.zeros(shape=[n, n], dtype=tf.float32)
+
+        # == run through == #
+        # (this must be so immensely inefficient ;__; )
+        for e in xrange(0, lie_algebra_dim):
+            T_re, T_im = lie_algebra_basis_element(n, e)
+            temp_re = tf.mul(flat_lambdas[e], tf.constant(T_re))
+            L_re += temp_re
+
+            temp_im = tf.mul(flat_lambdas[e], tf.constant(T_im))
+            L_im += temp_im
+
+    # TODO: test/prove that these produce identical results
 
     # === combine! ==== #
     L = tf.complex(L_re, L_im)
     return L
+
+def lie_algebra_basis_element(n, e, check_skew_hermitian=False):
+    """
+    Return a *single* element (the e-th one) of a basis of u(n).
+    See lie_algebra_basis for more details.
+
+    Args:
+        n:  as in u(n)
+        e:  which element?
+
+    Returns:
+        Two numpy arrays: the real part and imaginary parts of the element.
+    """
+    lie_algebra_dim = n*n
+    T_re = np.zeros(shape=(n, n), dtype=np.float32)
+    T_im = np.zeros(shape=(n, n), dtype=np.float32)
+
+    # three cases: imaginary diagonal, imaginary off-diagonal, real off-diagonal
+    # (reasonably sure this is how you convert these, it makes sense to me...)
+    i = e / n
+    j = e % n
+    if i > j:
+        # arbitrarily elect these to be the real ones
+        T_re[i, j] = 1
+        T_re[j, i] = -1
+    else:
+        # (includes i == j, the diagonal part)
+        T_im[i, j] = 1
+        T_im[j, i] = 1
+    if check_skew_hermitian:
+        basis_matrix = T_re + 1j*T_im
+        assert np.array_equal(np.transpose(np.conjugate(basis_matrix)), -basis_matrix)
+    return T_re, T_im
 
 def lie_algebra_basis(n):
     """
@@ -235,19 +285,11 @@ def lie_algebra_basis(n):
     lie_algebra_dim = n*n
     tensor_re = np.zeros(shape=(lie_algebra_dim, n, n), dtype=np.float32)
     tensor_im = np.zeros(shape=(lie_algebra_dim, n, n), dtype=np.float32)
-    # first n elements
-    for e in xrange(0, n):
-        tensor_im[e, e, e] = 1
-    for e in xrange(n, n + (n * (n - 1) / 2)):
-        for i in xrange(0, n):
-            for j in xrange(i + 1, n):
-                tensor_im[e, i, j] = 1
-                tensor_im[e, j, i] = 1
-    for e in xrange(n + (n * (n - 1) / 2), n*n):
-        for i in xrange(0, n):
-            for j in xrange(i + 1, n):
-                tensor_re[e, i, j] = 1
-                tensor_re[e, j, i] = -1
+
+    for e in xrange(0, lie_algebra_dim):
+        T_re, T_im = lie_algebra_basis_element(n, e)
+        tensor_re[e, :, :] = T_re
+        tensor_im[e, :, :] = T_im
 
     # ensure they are indeed skew-Hermitian
     A = tensor_re + 1j*tensor_im 
@@ -323,13 +365,16 @@ def unitary(arg, state_size, scope=None):
     Raises:
         ValueError if not arg.shape[1] == state_size
     """
-    raise NotImplementedError
     # assert statement here to make sure arg is a tensor etc.
     if not arg.get_shape().as_list()[1] == state_size:
         raise ValueError("Unitary expects shape[1] of first argument to be state size.")
 
     # TODO: better initializer for lambdas
     lie_algebra_dim = state_size*state_size
+
+    # testing/dev options...
+    INCREMENTAL_BUILD = True
+
     with vs.variable_scope(scope or "Unitary"):
         lambdas = vs.get_variable("Lambdas", dtype=tf.float32, shape=[1, lie_algebra_dim],
                                   initializer=tf.random_normal_initializer())
@@ -551,8 +596,11 @@ class uRNNCell(steph_RNNCell):
         ... but before it can exist, I will have to extend TensorFlow to include expm
         ... fun times ahead
         """
+        # TODO: think about how to get real outputs
         with vs.variable_scope(scope):
             # probably using sigmoid?
-            new_state = tf.nn.sigmoid(unitary(state, self._state_size, scope='Unitary/Transition') + linear(inputs, self._state_size, bias=True, scope='Linear/Transition'))
-            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
+            new_state = tf.nn.sigmoid(unitary(state, self._state_size, scope='Unitary/Transition') + tf.complex(linear(inputs, self._state_size, bias=True, scope='Linear/Transition'), 0))
+            output_complex = linear(new_state, self._output_size, bias=True, scope='Linear/Output', dtype=tf.complex64)
+            # for now, output is modulus...
+            output = tf.sqrt(tf.real(output_complex)**2 + tf.imag(output_complex)**2)
         return output, new_state
