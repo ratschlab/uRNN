@@ -265,15 +265,26 @@ def unitary(arg, state_size, scope=None):
     with vs.variable_scope(scope or "Unitary"):
         lambdas = vs.get_variable("Lambdas", dtype=tf.float32, shape=[1, lie_algebra_dim],
                                   initializer=tf.random_normal_initializer())
-        # basis is fixed                                 
+        # so like, big problem here is that we need n^2 basis elements
+        # ... each of which are n^2 in size
+        # ... that's a lot of ns!
+        # (actually, they are highly sparse, but tf doesn't have great sparse matrix support)
+        # solution ideas:
+        #   - incrementally build L using sparse (or even non-sparse) matrices
+        #   - explicitly construct L with lambdas somehow
+        #   (L is the element of the Lie algebra)
+        #   - magically make ~tensordot work for sparse matrices
+        #   - magically hope we don't need a large hidden state
+        #   - combine this solution with expm and use explicit representation of U
+        #   (U is the element of the Lie group)
         basis = vs.get_variable("Basis", dtype=tf.complex64,
                                 initializer=lie_algebra_basis(state_size), trainable=False)
         complex_lambdas = tf.complex(lambdas, 0)
         # TODO: make this work, np.tensordot etc...
-        U = tf.matmul(complex_lambdas, basis)
-        # TODO: bring this back
-#        U = expm(tf.matmul(lambdas, basis))     # expm not implemented :]
-        res = tf.matmul(arg, U)
+        L = tf.matmul(complex_lambdas, basis)
+        # TODO: bring this back (e.g. implement expm... possibly for sparse matrices?)
+#        L = expm(tf.matmul(lambdas, basis))
+        res = tf.matmul(arg, L)
     return res
 
 def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
