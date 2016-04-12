@@ -13,7 +13,7 @@ import pdb
 
 from tensorflow.models.rnn import rnn
 # for testing and learning
-from tensorflow.models.rnn.rnn_cell import RNNCell, BasicRNNCell
+from tensorflow.models.rnn.rnn_cell import RNNCell
 from tensorflow.python.ops import variable_scope as vs
 
 # === functions to help with implementing the theano version === #
@@ -134,6 +134,76 @@ def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
 
 # === functions for use with the general unitary RNN (my thing) === #
 
+def lie_algebra_element(n, lambdas):
+    """
+    Explicitly construct an element of a Lie algebra, assuming 'default' basis,
+    given a set of coefficients (lambdas).
+
+    That is,
+        L = sum lambda_i T^i
+    where T^i are the basis elements and lambda_i are the coefficients
+
+    The Lie algebra is u(n), associated to the Lie group U(n) of n x n unitary matrices.
+    The Lie algebra u(n) is n x n skew-Hermitian matrices. 
+
+    Args:
+        n:              see above
+        lambdas:        a Tensor of length n x n
+    Returns:
+        a 2D Tensor of shape [n, n], dtype tf.complex64, the element of the Lie algebra
+
+    This incremental sparse idea is taken from 
+        http://stackoverflow.com/questions/34685947/adjust-single-value-within-tensor-tensorflow
+
+    POSSIBLE TODO: combine this with function to generate elements of the basis,
+        or create a basis-element generator
+    """
+    lie_algebra_dim = n*n
+    assert lambdas.get_shape().as_list() == [1, lie_algebra_dim]
+
+    # init #
+    L_re = tf.zeros(shape=[n, n], dtype=tf.float32)
+    L_im = tf.zeros(shape=[n, n], dtype=tf.float32)
+
+    # === useful things === #
+    flat_lambdas = tf.squeeze(lambdas)
+    pdb.set_trace()
+    indices_diag = [[i, i] for i in xrange(n)]
+    indices_upper = [[i, j] for i in xrange(n) for j in xrange(i + 1, n)]
+    indices_lower = [[j, i] for i in xrange(n) for j in xrange(i + 1, n)]
+    L_shape = [n, n]
+
+    # === construct two sparse tensors! === #
+
+    # == imaginary == #
+    # all positive, so we don't need to change the values at all
+    # values along diagonal
+    values_im_diag = tf.slice(flat_lambdas, [0], [n])
+    # off-diagonal values (twice)
+    values_im_rest = tf.slice(flat_lambdas, [n], [(n * (n - 1) / 2)])
+    values_im = tf.concat(0, [values_im_diag, values_im_rest, values_im_rest])
+    # indices, now (this is not the most efficient or elegant but it mirrors basis-creation function)
+    indices_im = indices_diag + indices_upper + indices_lower
+    # create tensor
+    L_im_sparse = tf.SparseTensor(indices_im, values_im, L_shape)
+    L_im_reorder = tf.sparse_reorder(L_im_sparse)
+    L_im = tf.sparse_tensor_to_dense(L_im_reorder)
+
+    # == real == #
+    # need positive and negative versions of the values
+    values_re_pos = tf.slice(flat_lambdas, [n + (n * (n - 1) / 2)], [n * (n - 1) / 2])
+    values_re = tf.concat(0, [values_re_pos, tf.neg(values_re_pos)])
+    # have to make sure the neg and pos values get the correct indices!
+    indices_re = indices_upper + indices_lower
+    # create tensor
+    L_re_sparse = tf.SparseTensor(indices_re, values_re, L_shape)
+    L_re_reorder = tf.sparse_reorder(L_re_sparse)
+    L_re = tf.sparse_tensor_to_dense(L_re_reorder)
+
+    # === combine! ==== #
+    L = tf.complex(L_re, L_im)
+    return L
+
 def lie_algebra_basis(n):
     """
     Generate a basis of the Lie algebra u(n), associated to the Lie group U(n) of n x n unitary matrices.
@@ -162,7 +232,6 @@ def lie_algebra_basis(n):
     
     TODO: double-check all the maths here
     """
-    print n
     lie_algebra_dim = n*n
     tensor_re = np.zeros(shape=(lie_algebra_dim, n, n), dtype=np.float32)
     tensor_im = np.zeros(shape=(lie_algebra_dim, n, n), dtype=np.float32)
@@ -172,13 +241,13 @@ def lie_algebra_basis(n):
     for e in xrange(n, n + (n * (n - 1) / 2)):
         for i in xrange(0, n):
             for j in xrange(i + 1, n):
-                tensor_re[e, i, j] = 1
-                tensor_re[e, j, i] = -1
+                tensor_im[e, i, j] = 1
+                tensor_im[e, j, i] = 1
     for e in xrange(n + (n * (n - 1) / 2), n*n):
         for i in xrange(0, n):
             for j in xrange(i + 1, n):
-                tensor_im[e, i, j] = 1
-                tensor_im[e, j, i] = 1
+                tensor_re[e, i, j] = 1
+                tensor_re[e, j, i] = -1
 
     # ensure they are indeed skew-Hermitian
     A = tensor_re + 1j*tensor_im 
@@ -259,32 +328,43 @@ def unitary(arg, state_size, scope=None):
     if not arg.get_shape().as_list()[1] == state_size:
         raise ValueError("Unitary expects shape[1] of first argument to be state size.")
 
-    # TODO: 
-    #   initializer for lambdas
+    # TODO: better initializer for lambdas
     lie_algebra_dim = state_size*state_size
     with vs.variable_scope(scope or "Unitary"):
         lambdas = vs.get_variable("Lambdas", dtype=tf.float32, shape=[1, lie_algebra_dim],
                                   initializer=tf.random_normal_initializer())
         # so like, big problem here is that we need n^2 basis elements
-        # ... each of which are n^2 in size
+        # ... each of which are n^2 in size (although sparse with <=2 non-zero entries in the simple case)
         # ... that's a lot of ns!
-        # (actually, they are highly sparse, but tf doesn't have great sparse matrix support)
         # solution ideas:
-        #   - incrementally build L using sparse (or even non-sparse) matrices
-        #   - explicitly construct L with lambdas somehow
         #   (L is the element of the Lie algebra)
-        #   - magically make ~tensordot work for sparse matrices
-        #   - magically hope we don't need a large hidden state
-        #   - combine this solution with expm and use explicit representation of U
         #   (U is the element of the Lie group)
-        basis = vs.get_variable("Basis", dtype=tf.complex64,
-                                initializer=lie_algebra_basis(state_size), trainable=False)
-        complex_lambdas = tf.complex(lambdas, 0)
-        # TODO: make this work, np.tensordot etc...
-        L = tf.matmul(complex_lambdas, basis)
+        if INCREMENTAL_BUILD:
+        #   - incrementally build L using sparse (or even non-sparse) matrices
+            L = lie_algebra_element(state_size, lambdas)
+        elif SMALL_HIDDEN:
+        #   - magically hope we don't need a large hidden state
+            basis = vs.get_variable("Basis", dtype=tf.complex64,
+                                    initializer=lie_algebra_basis(state_size), trainable=False)
+            complex_lambdas = tf.complex(lambdas, 0)
+            # TODO: make this work, np.tensordot etc...
+            L = tf.matmul(complex_lambdas, basis)
+        elif EXPLICIT_CONSTRUCTION:
+        #   - explicitly construct L with lambdas somehow
+            raise NotImplementedError
+        elif SPARSE_TENSORDOT:
+        #   - magically make ~tensordot work for sparse matrices
+            raise NotImplementedError
+        elif EXPLICIT_EXPM:
+        #   - combine this solution with expm and use explicit representation of U
+            raise NotImplementedError
+        else:
+        #   - ?????
+            raise NotImplementedError
+        U = L   # FOR NOW, TODO FIX, INCORRECT
         # TODO: bring this back (e.g. implement expm... possibly for sparse matrices?)
-#        L = expm(tf.matmul(lambdas, basis))
-        res = tf.matmul(arg, L)
+#        U = expm(tf.matmul(lambdas, basis))
+        res = tf.matmul(arg, U)
     return res
 
 def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
@@ -440,16 +520,16 @@ class complex_RNNCell(steph_RNNCell):
         # TODO: fix fixed_initialiser
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
-#            step2 = tf.fft2d(step1, name='FFT')
-            step2 = step1
+            step2 = tf.fft2d(step1, name='FFT')
+#            step2 = step1
             step3 = reflection(step2, self._state_size, scope='Reflection/First')
             permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
                                           initializer=tf.complex(np.random.permutation(np.eye(self._state_size)), 0),
                                           trainable=False)
             step4 = tf.matmul(step3, permutation)
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-#            step6 = tf.ifft2d(step5, name='InverseFFT')
-            step6 = step5
+            step6 = tf.ifft2d(step5, name='InverseFFT')
+#            step6 = step5
             step7 = reflection(step6, self._state_size, scope='Reflection/Second')
             step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
