@@ -77,6 +77,7 @@ def update_step(cost, learning_rate=0.01, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
+
 def main(experiment='adding', batch_size=10, state_size=20, 
          num_epochs=5, T=100, learning_rate=0.001,
          model='tanhRNN', timestamp=False):
@@ -86,7 +87,7 @@ def main(experiment='adding', batch_size=10, state_size=20,
         experiment = 'adding'
     else:
         experiment = 'memory'
-    print 'running', experiment, 'experiment'
+    print 'running', experiment, 'experiment with', model
     # DEYOLO
     # === derivative options/values === #
     gradient_clipping = True
@@ -178,6 +179,11 @@ def main(experiment='adding', batch_size=10, state_size=20,
             saver.restore(session, best_model_path)
             test_cost = session.run(cost, {x: test_data.x, y: test_data.y})
             print 'Performance on test set:', test_cost
+
+def runmo(model):
+    """ wrapper script because that's how lazy I am """
+    main(model=model)
+    return True
 
 #if __name__ == "__main__":
 #    main()
