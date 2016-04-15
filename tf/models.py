@@ -38,35 +38,56 @@ def times_diag(arg, state_size, scope=None):
 
 def reflection(state, state_size, scope=None):
     """
-    I do not entirely trust or believe the reflection operator in the theano version,
-    so this is a shell for now.
+    I do not entirely trust or believe the reflection operator in the theano version. :/
     """
     # the reflections are initialised in a weird and tricky way: using initialize_matrix,
     # as if they are columns from a (2, state_size) matrix, so the range of random initialisation
     # is informed by both... but then my fixed_initializer function would return an incorrectly-sized
     # reflection, so I'm just going to do it manually.
     scale = np.sqrt(6.0/ (2 + state_size*2))
+    
     with vs.variable_scope(scope or "Reflection"):
-        # === option 1: fully complex reflection === #
-        # (runs into problems with RMSProp)
-        #reflection = vs.get_variable("Reflection", dtype=tf.complex64,
-        #                             initializer=tf.constant(np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))) +\
-        #                                                     1j*np.float32(np.random.uniform(low=-scale, high=scale, size=(state_size))),
-        #                                                     dtype=tf.complex64,
-        #                                                     shape=[state_size, 1]))
-        # === option 2: separate real and imaginary parts === #
-        reflection_re = vs.get_variable("Reflection/Real", dtype=tf.float32,
-                                        initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
-                                                                dtype=tf.float32,
-                                                                shape=[state_size]))
-        reflection_im = vs.get_variable("Reflection/Imaginary", dtype=tf.float32,
-                                        initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
-                                                                dtype=tf.float32,
-                                                                shape=[state_size]))
-        reflection= tf.complex(reflection_re, reflection_im, name="Reflection/Complex")
-        # FOR NOW THIS IS IT
-        # TODO: finish
-    return tf.mul(state, reflection)
+        reflect_re = vs.get_variable("Reflection/Real", dtype=tf.float32,
+                                     initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
+                                                             dtype=tf.float32,
+                                                             shape=[state_size, 1]))
+        reflect_im = vs.get_variable("Reflection/Imaginary", dtype=tf.float32,
+                                     initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
+                                                             dtype=tf.float32,
+                                                             shape=[state_size, 1]))
+        # NOTE: I am *directly copying* what they do in the theano code (inasmuch as one can in TF),
+        #       (s/input/state/g)
+        # even though I think the maths might be incorrect, see this issue: https://github.com/amarshah/complex_RNN/issues/2
+        # the function is times_reflection in models.py (not this file, hah hah hah!)
+        #
+        # Otherwise we could do this 'simply' using complex numbers.
+
+        state_re = tf.real(state)
+        state_im = tf.imag(state)
+        
+        vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
+
+        state_re_reflect_re = tf.matmul(state_re, reflect_re)
+        state_re_reflect_im = tf.matmul(state_re, reflect_im)
+        state_im_reflect_re = tf.matmul(state_im, reflect_re)
+        state_im_reflect_im = tf.matmul(state_im, reflect_im)
+
+        # tf.matmul with transposition is the same as T.outer
+        # we need something of the shape [batch_size, state_size] in the end
+        a = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_re, transpose_b=True)
+        b = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_im, transpose_b=True)
+        c = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_im, transpose_b=True)
+        d = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_re, transpose_b=True)
+
+        # the thing we return is:
+        # return_re = state_re - (2/vstarv)(d - c)
+        # return_im = state_im - (2/vstarv)(a + b)
+
+        new_state_re = state_re - (2.0 / vstarv) * (d - c)
+        new_state_im = state_im - (2.0 / vstarv) * (a + b)
+        new_state = tf.complex(new_state_re, new_state_im)
+
+    return new_state
 
 def relu_mod(state, scope=None):
     """
@@ -114,10 +135,6 @@ def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
     to be the identity. (Specifically, this is done in the IRNN case.)
     So if identity is >0, then it specifies which part of n_in_list (corresponding to a segment
     of the resulting matrix) should be initialised to identity, and not uniformly randomly as the rest.
-
-    TODO: complex flag.
-    It has occurred to me that the n_out etc. _sizes_ in this function are for the _real dimension_ of
-    the matrix, so when we're initialising with complex values we need to account for that.
     """
     matrix = np.empty(shape=(sum(n_in_list), n_out))
     row_marker = 0
@@ -184,7 +201,8 @@ def linear(args, output_size, bias, bias_start=0.0,
         bias_term = vs.get_variable("Bias", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
     return res + bias_term
 
-# === RNNS ! === #
+# === RNNs ! === #
+
 def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     batch_size = tf.shape(x)[0]
     if cell_type == 'tanhRNN':
@@ -334,8 +352,6 @@ class complex_RNNCell(steph_RNNCell):
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
         inputs_complex = tf.complex(inputs, 0)
-        # TODO: fix reflection
-        # TODO: fix fixed_initialiser
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
             step2 = tf.fft2d(step1, name='FFT')
@@ -352,8 +368,8 @@ class complex_RNNCell(steph_RNNCell):
             step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
             # (folding in the input data) 
-            foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real', dtype=tf.float32)
-            foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary', dtype=tf.float32)
+            foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
+            foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
             intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + step8
             
             new_state = relu_mod(intermediate_state, scope='ReLU_mod')
@@ -365,8 +381,7 @@ class complex_RNNCell(steph_RNNCell):
 class uRNNCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='uRNN'):
         """
-        this unitary RNN shall be my one
-        ... but before it can exist, I will have to extend TensorFlow to include expm
+        this unitary RNN shall be my one, once I figure it out I guess
         ... fun times ahead
         """
         # TODO: think about how to get real outputs
