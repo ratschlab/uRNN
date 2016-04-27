@@ -21,6 +21,9 @@ from unitary import unitary_matrix
 from scipy.fftpack import fft2, ifft2
 from functools import partial
 
+# === some globals === #
+VALI_SKIP = 100
+
 # === loss functions === #
 def trivial_loss(parameters, batch):
     """
@@ -204,7 +207,7 @@ def train_loop(batches, loss_function, initial_parameters, LEARNING_RATE=0.001, 
         loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch)
         #print i, 'TRAIN:', loss
         train_trace.append(loss)
-        if not vali_data is None and i % 100 == 0:
+        if not vali_data is None and i % VALI_SKIP == 0:
             vali_loss = loss_function(parameters, vali_data)
             print i, '\t\tVALI:', vali_loss
             vali_trace.append(vali_loss)
@@ -249,7 +252,7 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     """
     For testing, right now.
     """
-    d = 20
+    d = 5
     batch_size = 100
     n_batches = 10000
     
@@ -315,24 +318,13 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
 
     # save to an R-plottable file because I am so very lazy
     R_vali = open(experiment_settings+'_vali.txt', 'w')
-    temp_traces = []
     for (exp_name, trace) in vali_traces.iteritems():
-            R_vali.write(exp_name+' ')
-            temp_traces.append(trace)
-    R_vali.write('\n')
-    together_traces = zip(*temp_traces)
-    for line in together_traces:
-        R_vali.write(' '.join(map(str, line))+'\n')
-    R_vali.close()
+        for (n, value) in enumerate(trace):
+            R_vali.write(exp_name+' '+str(n*VALI_SKIP)+' '+str(value)+'\n')
     R_train = open(experiment_settings+'_train.txt', 'w')
-    temp_traces = []
     for (exp_name, trace) in train_traces.iteritems():
-            R_train.write(exp_name+' ')
-            temp_traces.append(trace)
-    R_train.write('\n')
-    together_traces = zip(*temp_traces)
-    for line in together_traces:
-        R_train.write(' '.join(map(str, line))+'\n')
+        for (n, value) in enumerate(trace):
+            R_train.write(exp_name+' '+str(n)+' '+str(value)+'\n')
 
     print test_losses
 
