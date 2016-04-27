@@ -72,18 +72,19 @@ def generate_memory(T, num_examples, seq_len=10):
    
     return (x_onehot, y)
 
-def generate_unitary_learning(U, num_examples, num_batches=1):
+def generate_unitary_learning(U, batch_size, num_batches=1):
     """
-    Given a unitary matrix U, generate num_examples pairs of
+    Given a unitary matrix U, generate batch_size pairs of
         {x_i, y_i}
     where y_i = U x_i
+    ... for each batch
     """
     d = U.shape[0]
     assert U.shape[1] == d
   
     batches = []
     for b in xrange(num_batches):
-        x = np.random.normal(size=(num_examples, d)) + 1j*np.random.normal(size=(num_examples, d))
+        x = np.random.normal(size=(batch_size, d)) + 1j*np.random.normal(size=(batch_size, d))
         y = np.dot(x, U.T)
         batches.append((x, y))
 
