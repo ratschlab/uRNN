@@ -239,7 +239,7 @@ def random_baseline(batches):
     d = x.shape[1]
 
     M = np.random.normal(size=(d, d))
-    y_hat = np.dot(M, x)
+    y_hat = np.dot(x, M)
     differences = y_hat - y
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
     return loss
@@ -249,7 +249,7 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     """
     For testing, right now.
     """
-    d = 2
+    d = 20
     batch_size = 100
     n_batches = 10000
     
@@ -308,8 +308,32 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     random_test_loss = random_baseline(batches)
     test_losses['random'] = random_test_loss
     
-    experiment_settings = 'd'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    experiment_settings = 'output/simple_d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
     cPickle.dump(train_traces, open(experiment_settings+'_train.pk', 'wb'))
-    cPickle.dump(vali_traces, open(experiment_settings+'_train.pk', 'wb'))
+    cPickle.dump(vali_traces, open(experiment_settings+'_vali.pk', 'wb'))
     cPickle.dump(test_losses, open(experiment_settings+'_test.pk', 'wb'))
+
+    # save to an R-plottable file because I am so very lazy
+    R_vali = open(experiment_settings+'_vali.txt', 'w')
+    temp_traces = []
+    for (exp_name, trace) in vali_traces.iteritems():
+            R_vali.write(exp_name+' ')
+            temp_traces.append(trace)
+    R_vali.write('\n')
+    together_traces = zip(*temp_traces)
+    for line in together_traces:
+        R_vali.write(' '.join(map(str, line))+'\n')
+    R_vali.close()
+    R_train = open(experiment_settings+'_train.txt', 'w')
+    temp_traces = []
+    for (exp_name, trace) in train_traces.iteritems():
+            R_train.write(exp_name+' ')
+            temp_traces.append(trace)
+    R_train.write('\n')
+    together_traces = zip(*temp_traces)
+    for line in together_traces:
+        R_train.write(' '.join(map(str, line))+'\n')
+
+    print test_losses
+
     return train_traces, vali_traces, test_losses
