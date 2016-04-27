@@ -14,6 +14,7 @@
 
 import numpy as np
 import pdb
+import cPickle
 
 from data import generate_unitary_learning
 from unitary import unitary_matrix
@@ -248,7 +249,7 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     """
     For testing, right now.
     """
-    d = 10
+    d = 2
     batch_size = 100
     n_batches = 10000
     
@@ -306,5 +307,9 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     # get a random baseline
     random_test_loss = random_baseline(batches)
     test_losses['random'] = random_test_loss
-
+    
+    experiment_settings = 'd'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    cPickle.dump(train_traces, open(experiment_settings+'_train.pk', 'wb'))
+    cPickle.dump(vali_traces, open(experiment_settings+'_train.pk', 'wb'))
+    cPickle.dump(test_losses, open(experiment_settings+'_test.pk', 'wb'))
     return train_traces, vali_traces, test_losses
