@@ -179,15 +179,18 @@ def lie_algebra_basis(n):
         
     return tf.complex(tensor_re, tensor_im)
 
-def random_unitary(n):
+def unitary_matrix(n, lambdas=None):
     """
     Returns a random unitary matrix of dimension n x n.
     I give no guarantees about the distribution we draw this from.
     To do it 'properly' probably requires a Haar measure.
     I do it using the Lie algebra representation.
+
+    Optional: provide lambdas.
     """
-    # create the lambdas
-    lambdas = np.random.normal(size=n*n)
+    if lambdas is None:
+            # create the lambdas
+            lambdas = np.random.normal(size=n*n)
     # prep
     L = np.zeros(shape=(n, n), dtype=complex)
     for (e, lam) in enumerate(lambdas):
