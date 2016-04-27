@@ -72,6 +72,20 @@ def generate_memory(T, num_examples, seq_len=10):
    
     return (x_onehot, y)
 
+def generate_unitary_learning(U, num_examples):
+    """
+    Given a unitary matrix U, generate num_examples pairs of
+        {x_i, y_i}
+    where y_i = U x_i
+    """
+    d = U.shape[0]
+    assert U.shape[1] == d
+
+    x = np.random.normal(size=(num_examples, d)) + 1j*np.random.normal(size=(num_examples, d))
+    y = np.dot(x, U.T)
+
+    return (x, y)
+
 class ExperimentData(object):
     def __init__(self, N, experiment, T):
         self.N = N
