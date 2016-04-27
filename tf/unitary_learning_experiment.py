@@ -238,7 +238,7 @@ def random_baseline(batches):
     x, y = test_batch
     d = x.shape[1]
 
-    M = np.random.normal(shape=(d, d))
+    M = np.random.normal(size=(d, d))
     y_hat = np.dot(M, x)
     differences = y_hat - y
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
