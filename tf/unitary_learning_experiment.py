@@ -154,7 +154,7 @@ def general_unitary_loss(parameters, batch):
     d = x.shape[1]
 
     lambdas = parameters
-    U = unitary_matrix(d, lambdas)
+    U = unitary_matrix(d, lambdas=lambdas)
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
@@ -248,84 +248,98 @@ def random_baseline(batches):
     return loss
 
 # === main loop === #
-def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary']):
+def main(d=5, experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary'], method='lie_algebra', n_reps=1):
     """
     For testing, right now.
     """
-    d = 5
+    # OPTIONS
     batch_size = 100
     n_batches = 10000
     
-    # set up test data
-    U = unitary_matrix(d)
-    batches = generate_unitary_learning(U, batch_size, n_batches)
-
-    # prepare trace dicts
-    train_traces = dict()
-    vali_traces = dict()
-    test_losses = dict()
-
-    if 'trivial' in experiments:
-        print 'Running "trivial" experiment!'
-        loss_fn = trivial_loss
-        initial_parameters = np.random.normal(size=d)
-        # actually run
-        train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
-        # record
-        train_traces['trivial'] = train_trace
-        vali_traces['trivial'] = vali_trace
-        test_losses['trivial'] = test_loss
-    if 'less_trivial' in experiments:
-        print 'Running "less_trivial" experiment!'
-        loss_fn = less_trivial_loss
-        initial_parameters = np.random.normal(size=d*d)
-        # actually run
-        train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
-        # record
-        train_traces['less_trivial'] = train_trace
-        vali_traces['less_trivial'] = vali_trace
-        test_losses['less_trivial'] = test_loss
-    if 'complex_RNN' in experiments:
-        print 'Running "complex_RNN" experiment!'
-        permutation = np.random.permutation(np.eye(d))
-        loss_fn = partial(complex_RNN_loss, permutation=permutation)
-        initial_parameters = np.random.normal(size=7*d)
-        # actually run
-        train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
-        # record
-        train_traces['complex_RNN'] = train_trace
-        vali_traces['complex_RNN'] = vali_trace
-        test_losses['complex_RNN'] = test_loss
-    if 'general_unitary' in experiments:
-        print 'Running "general_unitary" experiment!'
-        loss_fn = general_unitary_loss
-        initial_parameters = np.random.normal(size=d*d)
-        # actually run
-        train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
-        # record
-        train_traces['general_unitary'] = train_trace
-        vali_traces['general_unitary'] = vali_trace
-        test_losses['general_unitary'] = test_loss
-
-    # get a random baseline
-    random_test_loss = random_baseline(batches)
-    test_losses['random'] = random_test_loss
-    
-    experiment_settings = 'output/simple_d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
-    cPickle.dump(train_traces, open(experiment_settings+'_train.pk', 'wb'))
-    cPickle.dump(vali_traces, open(experiment_settings+'_vali.pk', 'wb'))
-    cPickle.dump(test_losses, open(experiment_settings+'_test.pk', 'wb'))
-
+    experiment_settings = 'output/simple_' + method + '_d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
     # save to an R-plottable file because I am so very lazy
     R_vali = open(experiment_settings+'_vali.txt', 'w')
-    for (exp_name, trace) in vali_traces.iteritems():
-        for (n, value) in enumerate(trace):
-            R_vali.write(exp_name+' '+str(n*VALI_SKIP)+' '+str(value)+'\n')
     R_train = open(experiment_settings+'_train.txt', 'w')
-    for (exp_name, trace) in train_traces.iteritems():
-        for (n, value) in enumerate(trace):
-            R_train.write(exp_name+' '+str(n)+' '+str(value)+'\n')
+    R_test = open(experiment_settings+'_test.txt', 'w')
+    header = 'experiment training_examples loss rep'
+    R_vali.write(header+'\n')
+    R_train.write(header+'\n')
+    R_test.write('experiment loss rep\n')
 
-    print test_losses
+    for rep in xrange(n_reps):
+        # set up test data
+        U = unitary_matrix(d, method=method)
+        batches = generate_unitary_learning(U, batch_size, n_batches)
+
+        # prepare trace dicts
+        train_traces = dict()
+        vali_traces = dict()
+        test_losses = dict()
+
+        if 'trivial' in experiments:
+            print 'Running "trivial" experiment!'
+            loss_fn = trivial_loss
+            initial_parameters = np.random.normal(size=d)
+            # actually run
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            # record
+            train_traces['trivial'] = train_trace
+            vali_traces['trivial'] = vali_trace
+            test_losses['trivial'] = test_loss
+        if 'less_trivial' in experiments:
+            print 'Running "less_trivial" experiment!'
+            loss_fn = less_trivial_loss
+            initial_parameters = np.random.normal(size=d*d)
+            # actually run
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            # record
+            train_traces['less_trivial'] = train_trace
+            vali_traces['less_trivial'] = vali_trace
+            test_losses['less_trivial'] = test_loss
+        if 'complex_RNN' in experiments:
+            print 'Running "complex_RNN" experiment!'
+            permutation = np.random.permutation(np.eye(d))
+            loss_fn = partial(complex_RNN_loss, permutation=permutation)
+            initial_parameters = np.random.normal(size=7*d)
+            # actually run
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            # record
+            train_traces['complex_RNN'] = train_trace
+            vali_traces['complex_RNN'] = vali_trace
+            test_losses['complex_RNN'] = test_loss
+        if 'general_unitary' in experiments:
+            print 'Running "general_unitary" experiment!'
+            loss_fn = general_unitary_loss
+            initial_parameters = np.random.normal(size=d*d)
+            # actually run
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            # record
+            train_traces['general_unitary'] = train_trace
+            vali_traces['general_unitary'] = vali_trace
+            test_losses['general_unitary'] = test_loss
+
+        # get a random baseline
+        random_test_loss = random_baseline(batches)
+        test_losses['random'] = random_test_loss
+        
+        print test_losses
+#        cPickle.dump(train_traces, open(experiment_settings+'_train.pk', 'wb'))
+#        cPickle.dump(vali_traces, open(experiment_settings+'_vali.pk', 'wb'))
+#        cPickle.dump(test_losses, open(experiment_settings+'_test.pk', 'wb'))
+
+        # save trace
+        for (exp_name, trace) in vali_traces.iteritems():
+            for (n, value) in enumerate(trace):
+                R_vali.write(exp_name+' '+str(n*VALI_SKIP)+' '+str(value)+' ' + str(rep)+'\n')
+        for (exp_name, trace) in train_traces.iteritems():
+            for (n, value) in enumerate(trace):
+                R_train.write(exp_name+' '+str(n)+' '+str(value)+' ' + str(rep) +'\n')
+
+        for (exp_name, loss) in test_losses.iteritems():
+            R_test.write(exp_name + ' ' + str(loss) + ' ' + str(rep) + '\n')
+    
+    R_vali.close()
+    R_train.close()
+    R_test.close()
 
     return train_traces, vali_traces, test_losses
