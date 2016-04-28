@@ -21,6 +21,9 @@ from unitary import unitary_matrix
 from scipy.fftpack import fft2, ifft2
 from functools import partial
 
+# === some globals === #
+VALI_SKIP = 100
+
 # === loss functions === #
 def trivial_loss(parameters, batch):
     """
@@ -204,7 +207,7 @@ def train_loop(batches, loss_function, initial_parameters, LEARNING_RATE=0.001, 
         loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch)
         #print i, 'TRAIN:', loss
         train_trace.append(loss)
-        if not vali_data is None and i % 100 == 0:
+        if not vali_data is None and i % VALI_SKIP == 0:
             vali_loss = loss_function(parameters, vali_data)
             print i, '\t\tVALI:', vali_loss
             vali_trace.append(vali_loss)
@@ -238,8 +241,8 @@ def random_baseline(batches):
     x, y = test_batch
     d = x.shape[1]
 
-    M = np.random.normal(shape=(d, d))
-    y_hat = np.dot(M, x)
+    M = np.random.normal(size=(d, d))
+    y_hat = np.dot(x, M)
     differences = y_hat - y
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
     return loss
@@ -308,8 +311,21 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     random_test_loss = random_baseline(batches)
     test_losses['random'] = random_test_loss
     
-    experiment_settings = 'd'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    experiment_settings = 'output/simple_d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
     cPickle.dump(train_traces, open(experiment_settings+'_train.pk', 'wb'))
-    cPickle.dump(vali_traces, open(experiment_settings+'_train.pk', 'wb'))
+    cPickle.dump(vali_traces, open(experiment_settings+'_vali.pk', 'wb'))
     cPickle.dump(test_losses, open(experiment_settings+'_test.pk', 'wb'))
+
+    # save to an R-plottable file because I am so very lazy
+    R_vali = open(experiment_settings+'_vali.txt', 'w')
+    for (exp_name, trace) in vali_traces.iteritems():
+        for (n, value) in enumerate(trace):
+            R_vali.write(exp_name+' '+str(n*VALI_SKIP)+' '+str(value)+'\n')
+    R_train = open(experiment_settings+'_train.txt', 'w')
+    for (exp_name, trace) in train_traces.iteritems():
+        for (n, value) in enumerate(trace):
+            R_train.write(exp_name+' '+str(n)+' '+str(value)+'\n')
+
+    print test_losses
+
     return train_traces, vali_traces, test_losses
