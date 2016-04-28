@@ -179,25 +179,35 @@ def lie_algebra_basis(n):
         
     return tf.complex(tensor_re, tensor_im)
 
-def unitary_matrix(n, lambdas=None):
+def unitary_matrix(n, method='lie_algebra', lambdas=None):
     """
     Returns a random unitary matrix of dimension n x n.
     I give no guarantees about the distribution we draw this from.
     To do it 'properly' probably requires a Haar measure.
-    I do it using the Lie algebra representation.
 
-    Optional: provide lambdas.
+    Options:
+        - Lie algebra representation (optionally provide lambdas)
+        - Using qr decomposition of a random square complex matrix
     """
-    if lambdas is None:
+    if method == 'lie_algebra':
+        if lambdas is None:
             # create the lambdas
             lambdas = np.random.normal(size=n*n)
-    # prep
-    L = np.zeros(shape=(n, n), dtype=complex)
-    for (e, lam) in enumerate(lambdas):
-        basis_element_re, basis_element_im = lie_algebra_basis_element(n, e)
-        L += lam*basis_element_re
-        L += 1j*lam*basis_element_im
-    U = expm(L)
+        # prep
+        L = np.zeros(shape=(n, n), dtype=complex)
+        for (e, lam) in enumerate(lambdas):
+            basis_element_re, basis_element_im = lie_algebra_basis_element(n, e)
+            L += lam*basis_element_re
+            L += 1j*lam*basis_element_im
+        U = expm(L)
+    elif method == 'qr':
+        if not lambdas is None:
+            print 'WARNING: Method qr selected, but lambdas provided (uselessly)!'
+        A = np.random.random(size=(n, n)) + 1j*np.random.random(size=(n, n))
+        U, r = np.linalg.qr(A)
+    else:
+        print method
+        raise NotImplementedError
     return U
 
 def unitary(arg, state_size, scope=None):
