@@ -249,7 +249,7 @@ def main(experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary
     """
     For testing, right now.
     """
-    d = 2
+    d = 5
     batch_size = 100
     n_batches = 10000
     
