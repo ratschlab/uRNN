@@ -136,7 +136,7 @@ def complex_RNN_loss(parameters, batch, permutation):
     step5 = np.dot(step4, diag2)
     step6 = ifft2(step5)
     step7 = do_reflection(step6, reflection2_re, reflection2_im)
-    step8 = np.dot(step6, diag3)
+    step8 = np.dot(step7, diag3)
     
     # POSSIBLY do relu_mod...
 
