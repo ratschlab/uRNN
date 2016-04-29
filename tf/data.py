@@ -5,7 +5,7 @@
 # Lightly modified from the original, for TensorFlow and readability.
 
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 import pdb
 
 def generate_adding(T, num_examples):
@@ -72,7 +72,24 @@ def generate_memory(T, num_examples, seq_len=10):
    
     return (x_onehot, y)
 
-def generate_unitary_learning(U, batch_size, num_batches=1):
+def create_batches(x, y, batch_size, num_batches, num_epochs):
+    """
+    Given x and y, split into batches.
+    I lazy.
+    Returns a list of batches.
+    """
+    batches = []
+    num_examples = num_batches * batch_size
+    for e in xrange(num_epochs):
+        perm = np.random.permutation(num_examples)
+        for b in xrange(num_batches):
+            i = b * batch_size
+            x_batch = x[perm[b * batch_size : (b + 1)*batch_size], :]
+            y_batch = y[perm[b * batch_size : (b + 1)*batch_size], :]
+            batches.append((x_batch, y_batch))
+    return batches
+
+def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1, noise=0.01):
     """
     Given a unitary matrix U, generate batch_size pairs of
         {x_i, y_i}
@@ -81,13 +98,15 @@ def generate_unitary_learning(U, batch_size, num_batches=1):
     """
     d = U.shape[0]
     assert U.shape[1] == d
-  
-    batches = []
-    for b in xrange(num_batches):
-        x = np.random.normal(size=(batch_size, d)) + 1j*np.random.normal(size=(batch_size, d))
-        y = np.dot(x, U.T)
-        batches.append((x, y))
+ 
+    num_examples = batch_size * num_batches
 
+    x = np.random.normal(size=(num_examples, d)) + 1j*np.random.normal(size=(num_examples, d))
+    y = np.dot(x, U.T)
+    if not noise is None:
+        y += np.random.normal(scale=noise) + 1j*np.random.normal(scale=noise)
+
+    batches = create_batches(x, y, batch_size, num_batches, num_epochs)
     return batches
 
 class ExperimentData(object):
