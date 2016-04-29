@@ -20,9 +20,11 @@ from data import generate_unitary_learning, create_batches
 from unitary import unitary_matrix, project_to_unitary
 from scipy.fftpack import fft2, ifft2
 from functools import partial
+from multiprocessing import Pool
 
 # === some globals === #
-VALI_SKIP = 100
+VALI_SKIP = 500
+NUM_WORKERS = 4
 
 # === loss functions === #
 def trivial_loss(parameters, batch):
@@ -132,11 +134,13 @@ def complex_RNN_loss(parameters, batch, permutation):
     # === do the transformation === #
     step1 = np.dot(x, diag1)
     step2 = fft2(step1)
-    step3 = do_reflection(step2, reflection1_re, reflection1_im)
+    #step3 = do_reflection(step2, reflection1_re, reflection1_im)
+    step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
     step6 = ifft2(step5)
-    step7 = do_reflection(step6, reflection2_re, reflection2_im)
+    #step7 = do_reflection(step6, reflection2_re, reflection2_im)
+    step7 = step6
     step8 = np.dot(step7, diag3)
     
     # POSSIBLY do relu_mod...
@@ -164,7 +168,17 @@ def general_unitary_loss(parameters, batch):
     return loss
 
 # === utility functions === #
-def numerical_gradient(loss_function, parameters, batch, EPSILON=10e-6):
+def numerical_partial_gradient(i, loss_function=None, parameters=None, batch=None, EPSILON=10e-6):
+    """
+    For giving to the pool.
+    """
+    n_parameters = len(parameters)
+    parameters_epsilon = np.zeros(n_parameters)
+    parameters_epsilon[i] = EPSILON
+    new_loss = loss_function(parameters + parameters_epsilon, batch)
+    return new_loss
+    
+def numerical_gradient(loss_function, parameters, batch, pool, EPSILON=10e-6):
     """
     Calculate the numerical gradient of a given loss function with respect to a np.array of parameters.
     """
@@ -173,19 +187,26 @@ def numerical_gradient(loss_function, parameters, batch, EPSILON=10e-6):
     assert len(parameters.shape) == 1
     parameters_gradient = np.zeros_like(parameters)
 
-    n_parameters = len(parameters)
-    for i in xrange(n_parameters):
-        parameters_epsilon = np.zeros(n_parameters)
-        parameters_epsilon[i] = EPSILON
-       
-        new_loss = loss_function(parameters + parameters_epsilon, batch)
-        
-        difference = (new_loss - original_loss)/EPSILON
-        parameters_gradient[i] = difference
+    numerical_parallel = partial(numerical_partial_gradient, 
+                                 loss_function=loss_function,
+                                 parameters=parameters,
+                                 batch=batch)
+    new_losses = np.array(pool.map(numerical_parallel, xrange(len(parameters))))
+    parameters_gradient = (new_losses - original_loss)/EPSILON
+
+#    n_parameters = len(parameters)
+#    for i in xrange(n_parameters):
+#        parameters_epsilon = np.zeros(n_parameters)
+#        parameters_epsilon[i] = EPSILON
+#       
+#        new_loss = loss_function(parameters + parameters_epsilon, batch)
+#        
+#        difference = (new_loss - original_loss)/EPSILON
+##        parameters_gradient[i] = difference
     
     return original_loss, parameters_gradient
 
-def train_loop(batches, loss_function, initial_parameters, LEARNING_RATE=0.001, vali_data=None, PROJECT_TO_UNITARY=False):
+def train_loop(batches, loss_function, initial_parameters, pool, LEARNING_RATE=0.001, vali_data=None, PROJECT_TO_UNITARY=False):
     """
     Arguments:
         batches:            list of training batches
@@ -204,8 +225,9 @@ def train_loop(batches, loss_function, initial_parameters, LEARNING_RATE=0.001, 
     parameters = initial_parameters
     train_trace = []
     vali_trace = []
+
     for (i, batch) in enumerate(batches):
-        loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch)
+        loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch, pool)
         #print i, 'TRAIN:', loss
         train_trace.append(loss)
         if not vali_data is None and i % VALI_SKIP == 0:
@@ -216,11 +238,11 @@ def train_loop(batches, loss_function, initial_parameters, LEARNING_RATE=0.001, 
         parameters = parameters - LEARNING_RATE*parameters_gradient
         if PROJECT_TO_UNITARY:
             # use the polar decomposition to re-unitarise the matrix
-            parameters = project_to_unitary(parameters)
+            parameters = project_to_unitary(parameters, check_unitary=False)
     print 'Training complete!'
     return train_trace, vali_trace, parameters
 
-def run_experiment(loss_fn, batches, initial_parameters, TEST=True, project=False):
+def run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True, project=False):
     """
     Such laziness.
     """
@@ -231,6 +253,7 @@ def run_experiment(loss_fn, batches, initial_parameters, TEST=True, project=Fals
     train_trace, vali_trace, trained_parameters = train_loop(train_batches, 
                                                              loss_fn, 
                                                              initial_parameters, 
+                                                             pool,
                                                              vali_data=vali_batch,
                                                              PROJECT_TO_UNITARY=project)
     
@@ -284,6 +307,9 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
     R_train.write(header+'\n')
     R_test.write('experiment loss rep\n')
 
+    # some parallelism
+    pool = Pool(NUM_WORKERS)
+
     for rep in xrange(n_reps):
         # set up test data
         U = unitary_matrix(d, method=method)
@@ -297,7 +323,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
         # get 'baselines'
         test_batch = batches[1]
         random_test_loss = random_baseline(test_batch, method=method)
-        test_losses['random'] = random_test_loss
+        test_losses['random_unitary'] = random_test_loss
         true_test_loss = true_baseline(U, test_batch)
         test_losses['true'] = true_test_loss
 
@@ -306,7 +332,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
             loss_fn = trivial_loss
             initial_parameters = np.random.normal(size=d) + 1j*np.random.normal(size=d)
             # actually run
-            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True)
             # record
             train_traces['trivial'] = train_trace
             vali_traces['trivial'] = vali_trace
@@ -316,7 +342,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
-            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True)
             # record
             train_traces['free_matrix'] = train_trace
             vali_traces['free_matrix'] = vali_trace
@@ -327,7 +353,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
-            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True, project=True)
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True, project=True)
             # record
             train_traces['projection'] = train_trace
             vali_traces['projection'] = vali_trace
@@ -339,7 +365,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
             # all of these parameters are real
             initial_parameters = np.random.normal(size=7*d)
             # actually run
-            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True)
             # record
             train_traces['complex_RNN'] = train_trace
             vali_traces['complex_RNN'] = vali_trace
@@ -349,7 +375,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
             loss_fn = general_unitary_loss
             initial_parameters = np.random.normal(size=d*d)
             # actually run
-            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, TEST=True)
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True)
             # record
             train_traces['general_unitary'] = train_trace
             vali_traces['general_unitary'] = vali_trace
