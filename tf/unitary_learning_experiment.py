@@ -16,7 +16,7 @@ import numpy as np
 import pdb
 import cPickle
 
-from data import generate_unitary_learning
+from data import generate_unitary_learning, create_batches
 from unitary import unitary_matrix
 from scipy.fftpack import fft2, ifft2
 from functools import partial
@@ -233,11 +233,10 @@ def run_experiment(loss_fn, batches, initial_parameters, TEST=True):
         test_loss = -1
     return train_trace, vali_trace, test_loss
 
-def random_baseline(batches):
+def random_baseline(test_batch):
     """
     OK
     """
-    test_batch = batches[1]
     x, y = test_batch
     d = x.shape[1]
 
@@ -247,13 +246,23 @@ def random_baseline(batches):
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
     return loss
 
+def true_baseline(U, test_batch):
+    """
+    Use the actual generating unitary matrix.
+    """
+    x, y = test_batch
+    
+    y_hat = np.dot(x, U.T)
+    differences = y_hat - y
+    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    return loss
+
 # === main loop === #
-def main(d=5, experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary'], method='lie_algebra', n_reps=1):
+def main(d=5, experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_unitary'], method='lie_algebra', n_reps=1, n_epochs=5):
     """
     For testing, right now.
     """
     # OPTIONS
-    d = 20
     batch_size = 100
     n_batches = 10000
     
@@ -270,12 +279,19 @@ def main(d=5, experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_un
     for rep in xrange(n_reps):
         # set up test data
         U = unitary_matrix(d, method=method)
-        batches = generate_unitary_learning(U, batch_size, n_batches)
+        batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs)
 
         # prepare trace dicts
         train_traces = dict()
         vali_traces = dict()
         test_losses = dict()
+
+        # get 'baselines'
+        test_batch = batches[1]
+        random_test_loss = random_baseline(test_batch)
+        test_losses['random'] = random_test_loss
+        true_test_loss = true_baseline(U, test_batch)
+        test_losses['true'] = true_test_loss
 
         if 'trivial' in experiments:
             print 'Running "trivial" experiment!'
@@ -319,16 +335,9 @@ def main(d=5, experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_un
             vali_traces['general_unitary'] = vali_trace
             test_losses['general_unitary'] = test_loss
 
-        # get a random baseline
-        random_test_loss = random_baseline(batches)
-        test_losses['random'] = random_test_loss
-        
         print test_losses
-#        cPickle.dump(train_traces, open(experiment_settings+'_train.pk', 'wb'))
-#        cPickle.dump(vali_traces, open(experiment_settings+'_vali.pk', 'wb'))
-#        cPickle.dump(test_losses, open(experiment_settings+'_test.pk', 'wb'))
 
-        # save trace
+        # save trace (only when comparison is fully done)
         for (exp_name, trace) in vali_traces.iteritems():
             for (n, value) in enumerate(trace):
                 R_vali.write(exp_name+' '+str(n*VALI_SKIP)+' '+str(value)+' ' + str(rep)+'\n')
@@ -343,4 +352,4 @@ def main(d=5, experiments=['trivial', 'less_trivial', 'complex_RNN', 'general_un
     R_train.close()
     R_test.close()
 
-    return train_traces, vali_traces, test_losses
+    return True
