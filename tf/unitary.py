@@ -12,7 +12,7 @@ import numpy as np
 import pdb
 
 #from tensorflow.python.ops import variable_scope as vs
-from scipy.linalg import expm
+from scipy.linalg import expm, polar
 from scipy.fftpack import fft2, ifft2
 
 def lie_algebra_element(n, lambdas, sparse=False):
@@ -179,6 +179,23 @@ def lie_algebra_basis(n):
         assert np.array_equal(np.transpose(np.conjugate(basis_matrix)), -basis_matrix)
         
     return tf.complex(tensor_re, tensor_im)
+
+def project_to_unitary(parameters, check_unitary=True):
+    """
+    Use polar decomposition to find the closest unitary matrix.
+    """
+    # parameters must be a square number (TODO: FIRE)
+    n_sq = len(parameters)
+    n = int(np.sqrt(n_sq))
+
+    A = parameters.reshape(n, n)
+    U, p = polar(A, side='left')
+
+    if check_unitary:
+        assert np.allclose(np.dot(U, np.conj(U.T)), np.eye(n))
+
+    parameters = U.reshape(n_sq)
+    return parameters
 
 def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
     """
