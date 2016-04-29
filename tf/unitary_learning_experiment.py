@@ -241,14 +241,14 @@ def run_experiment(loss_fn, batches, initial_parameters, TEST=True, project=Fals
         test_loss = -1
     return train_trace, vali_trace, test_loss
 
-def random_baseline(test_batch):
+def random_baseline(test_batch, method):
     """
-    OK
+    Test using a random, UNITARY matrix.
     """
     x, y = test_batch
     d = x.shape[1]
 
-    M = np.random.normal(size=(d, d))
+    M = unitary_matrix(d, method=method)
     y_hat = np.dot(x, M)
     differences = y_hat - y
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
@@ -296,7 +296,7 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
 
         # get 'baselines'
         test_batch = batches[1]
-        random_test_loss = random_baseline(test_batch)
+        random_test_loss = random_baseline(test_batch, method=method)
         test_losses['random'] = random_test_loss
         true_test_loss = true_baseline(U, test_batch)
         test_losses['true'] = true_test_loss
