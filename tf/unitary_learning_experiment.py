@@ -59,14 +59,14 @@ def free_matrix_loss(parameters, batch):
 
 # === parametrisation-specific functions === #
 
-def do_reflection(x, v_re, v_im, theano_method=False):
+def do_reflection(x, v_re, v_im, theano_reflection=False):
     """
     Hey, it's this function again! Woo!
-    NOTE/WARNING: theano_method gives a DIFFERENT RESULT to the other one...
+    NOTE/WARNING: theano_reflection gives a DIFFERENT RESULT to the other one...
     see this unresolved issue:
     https://github.com/amarshah/complex_RNN/issues/2
     """
-    if theano_method:
+    if theano_reflection:
         # (mostly copypasta from theano, with T replaced by np all over)
         # FOR NOW OK
         input_re = np.real(x)
@@ -113,7 +113,7 @@ def do_reflection(x, v_re, v_im, theano_method=False):
 
     return output
 
-def complex_RNN_loss(parameters, batch, permutation):
+def complex_RNN_loss(parameters, batch, permutation, theano_reflection=True):
     """
     Transform data according to the complex_RNN transformations.
     (requires importing a bunch of things and weird tensorflow hax)
@@ -146,12 +146,12 @@ def complex_RNN_loss(parameters, batch, permutation):
     # === do the transformation === #
     step1 = np.dot(x, diag1)
     step2 = fft2(step1)
-    step3 = do_reflection(step2, reflection1_re, reflection1_im)
+    step3 = do_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
     #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
     step6 = ifft2(step5)
-    step7 = do_reflection(step6, reflection2_re, reflection2_im)
+    step7 = do_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
     #step7 = step6
     step8 = np.dot(step7, diag3)
     
@@ -303,7 +303,7 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=9, n_epochs=None, noise=0.01):
+def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN_vanilla', 'complex_RNN', 'general_unitary'], method=None, n_reps=9, n_epochs=None, noise=0.01):
     """
     For testing, right now.
     """
@@ -314,7 +314,7 @@ def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN', 'general_
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs
     
-    experiment_settings = 'output/simple/d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    experiment_settings = 'output/simple/d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
 
     # save to an R-plottable file because I am so very lazy
     R_vali = open(experiment_settings+'_vali.txt', 'w')
@@ -380,10 +380,26 @@ def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN', 'general_
             train_traces['projection'] = train_trace
             vali_traces['projection'] = vali_trace
             test_losses['projection'] = test_loss
+        if 'complex_RNN_vanilla' in experiments:
+            print 'Running "complex_RNN_vanilla" experiment!'
+            permutation = np.random.permutation(np.eye(d))
+            loss_fn = partial(complex_RNN_loss, 
+                              permutation=permutation,
+                              theano_reflection=True)
+            # all of these parameters are real
+            initial_parameters = np.random.normal(size=7*d)
+            # actually run
+            train_trace, vali_trace, test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, TEST=True)
+            # record
+            train_traces['complex_RNN_vanilla'] = train_trace
+            vali_traces['complex_RNN_vanilla'] = vali_trace
+            test_losses['complex_RNN_vanilla'] = test_loss
         if 'complex_RNN' in experiments:
             print 'Running "complex_RNN" experiment!'
             permutation = np.random.permutation(np.eye(d))
-            loss_fn = partial(complex_RNN_loss, permutation=permutation)
+            loss_fn = partial(complex_RNN_loss, 
+                              permutation=permutation,
+                              theano_reflection=False)
             # all of these parameters are real
             initial_parameters = np.random.normal(size=7*d)
             # actually run
