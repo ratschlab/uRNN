@@ -185,8 +185,7 @@ def project_to_unitary(parameters, check_unitary=True):
     Use polar decomposition to find the closest unitary matrix.
     """
     # parameters must be a square number (TODO: FIRE)
-    n_sq = len(parameters)
-    n = int(np.sqrt(n_sq))
+    n = int(np.sqrt(len(parameters)))
 
     A = parameters.reshape(n, n)
     U, p = polar(A, side='left')
@@ -194,7 +193,7 @@ def project_to_unitary(parameters, check_unitary=True):
     if check_unitary:
         assert np.allclose(np.dot(U, np.conj(U.T)), np.eye(n))
 
-    parameters = U.reshape(n_sq)
+    parameters = U.reshape(n*n)
     return parameters
 
 def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
