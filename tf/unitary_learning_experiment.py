@@ -15,16 +15,18 @@
 import numpy as np
 import pdb
 import cPickle
+import sys
 
 from data import generate_unitary_learning, create_batches
 from unitary import unitary_matrix, project_to_unitary
 from scipy.fftpack import fft2, ifft2
 from functools import partial
 from multiprocessing import Pool
+from random import sample
 
 # === some globals === #
-VALI_SKIP = 500
-NUM_WORKERS = 4
+MEASURE_SKIP = 250
+NUM_WORKERS = 32
 
 # === loss functions === #
 def trivial_loss(parameters, batch):
@@ -57,47 +59,57 @@ def free_matrix_loss(parameters, batch):
 
 # === parametrisation-specific functions === #
 
-def do_reflection(x, v_re, v_im):
+def do_reflection(x, v_re, v_im, theano_method=False):
     """
     Hey, it's this function again! Woo!
-    (mostly copypasta from theano, with T replaced by np all over)
+    NOTE/WARNING: theano_method gives a DIFFERENT RESULT to the other one...
+    see this unresolved issue:
+    https://github.com/amarshah/complex_RNN/issues/2
     """
-    # FOR NOW OK
-    input_re = np.real(x)
-    # alpha
-    input_im = np.imag(x)
-    # beta
-    reflect_re = v_re
-    # mu
-    reflect_im = v_im
-    # nu
+    if theano_method:
+        # (mostly copypasta from theano, with T replaced by np all over)
+        # FOR NOW OK
+        input_re = np.real(x)
+        # alpha
+        input_im = np.imag(x)
+        # beta
+        reflect_re = v_re
+        # mu
+        reflect_im = v_im
+        # nu
 
-    vstarv = (reflect_re**2 + reflect_im**2).sum()
+        vstarv = (reflect_re**2 + reflect_im**2).sum()
 
-    # (the following things are roughly scalars)
-    # (they actually are as long as the batch size, e.g. input[0])
-    input_re_reflect_re = np.dot(input_re, reflect_re)
-    # αμ
-    input_re_reflect_im = np.dot(input_re, reflect_im)
-    # αν
-    input_im_reflect_re = np.dot(input_im, reflect_re)
-    # βμ
-    input_im_reflect_im = np.dot(input_im, reflect_im)
-    # βν
+        # (the following things are roughly scalars)
+        # (they actually are as long as the batch size, e.g. input[0])
+        input_re_reflect_re = np.dot(input_re, reflect_re)
+        # αμ
+        input_re_reflect_im = np.dot(input_re, reflect_im)
+        # αν
+        input_im_reflect_re = np.dot(input_im, reflect_re)
+        # βμ
+        input_im_reflect_im = np.dot(input_im, reflect_im)
+        # βν
 
-    a = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
-    # outer(αμ - βν, mu)
-    b = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
-    # outer(αν + βμ, nu)
-    c = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_im)
-    # outer(αμ - βν, nu)
-    d = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_re)
-    # outer(αν + βμ, mu)
+        a = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
+        # outer(αμ - βν, mu)
+        b = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
+        # outer(αν + βμ, nu)
+        c = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_im)
+        # outer(αμ - βν, nu)
+        d = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_re)
+        # outer(αν + βμ, mu)
 
-    output_re = input_re - 2. / vstarv * (d - c)
-    output_im = input_im - 2. / vstarv * (a + b)
-    
-    output = output_re + 1j*output_im
+        output_re = input_re - 2. / vstarv * (d - c)
+        output_im = input_im - 2. / vstarv * (a + b)
+        
+        output = output_re + 1j*output_im
+    else:
+        # do it the 'old fashioned' way
+        v = v_re + 1j*v_im
+        # aka https://en.wikipedia.org/wiki/Reflection_%28mathematics%29#Reflection_through_a_hyperplane_in_n_dimensions
+        # but with conj v dot with x
+        output = x - (2.0/np.dot(v, np.conj(v))) * np.outer(np.dot(x, np.conj(v)), v)
 
     return output
 
@@ -134,13 +146,13 @@ def complex_RNN_loss(parameters, batch, permutation):
     # === do the transformation === #
     step1 = np.dot(x, diag1)
     step2 = fft2(step1)
-    #step3 = do_reflection(step2, reflection1_re, reflection1_im)
-    step3 = step2
+    step3 = do_reflection(step2, reflection1_re, reflection1_im)
+    #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
     step6 = ifft2(step5)
-    #step7 = do_reflection(step6, reflection2_re, reflection2_im)
-    step7 = step6
+    step7 = do_reflection(step6, reflection2_re, reflection2_im)
+    #step7 = step6
     step8 = np.dot(step7, diag3)
     
     # POSSIBLY do relu_mod...
@@ -228,12 +240,14 @@ def train_loop(batches, loss_function, initial_parameters, pool, LEARNING_RATE=0
 
     for (i, batch) in enumerate(batches):
         loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch, pool)
-        #print i, 'TRAIN:', loss
-        train_trace.append(loss)
-        if not vali_data is None and i % VALI_SKIP == 0:
-            vali_loss = loss_function(parameters, vali_data)
-            print i, '\t\tVALI:', vali_loss
-            vali_trace.append(vali_loss)
+        if i % MEASURE_SKIP == 0:
+            # only record some of the points, for memory efficiency
+            train_trace.append(loss)
+            if not vali_data is None:
+                vali_loss = loss_function(parameters, vali_data)
+                if i % (MEASURE_SKIP*4) == 0:
+                    print i, '\t\tVALI:', vali_loss
+                vali_trace.append(vali_loss)
         # *now* update parameters
         parameters = parameters - LEARNING_RATE*parameters_gradient
         if PROJECT_TO_UNITARY:
@@ -289,20 +303,24 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN', 'general_unitary'], method='lie_algebra', n_reps=1, n_epochs=5):
+def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=9, n_epochs=None, noise=0.01):
     """
     For testing, right now.
     """
     # OPTIONS
-    batch_size = 100
-    n_batches = 10000
+    batch_size = 20
+    n_batches = 50000
+    if n_epochs is None:
+        n_epochs = d
+        print 'WARNING: No n_epochs provided, using', n_epochs
     
-    experiment_settings = 'output/simple_' + method + '_d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    experiment_settings = 'output/simple/d'+str(d) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+
     # save to an R-plottable file because I am so very lazy
     R_vali = open(experiment_settings+'_vali.txt', 'w')
     R_train = open(experiment_settings+'_train.txt', 'w')
     R_test = open(experiment_settings+'_test.txt', 'w')
-    header = 'experiment training_examples loss rep'
+    header = 'experiment training_examples loss rep method'
     R_vali.write(header+'\n')
     R_train.write(header+'\n')
     R_test.write('experiment loss rep\n')
@@ -311,9 +329,13 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
     pool = Pool(NUM_WORKERS)
 
     for rep in xrange(n_reps):
+        # randomly select the method
+        method = sample(['lie_algebra', 'qr', 'composition'], 1)[0]
+        print rep, ': generating U using:', method
+
         # set up test data
         U = unitary_matrix(d, method=method)
-        batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs)
+        batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs, noise=noise)
 
         # prepare trace dicts
         train_traces = dict()
@@ -386,16 +408,25 @@ def main(d=5, experiments=['trivial', 'free_matrix', 'projection', 'complex_RNN'
         # save trace (only when comparison is fully done)
         for (exp_name, trace) in vali_traces.iteritems():
             for (n, value) in enumerate(trace):
-                R_vali.write(exp_name+' '+str(n*VALI_SKIP)+' '+str(value)+' ' + str(rep)+'\n')
+                R_vali.write(exp_name+' '+str(n*MEASURE_SKIP)+' '+str(value)+' ' + str(rep)+' ' + method+'\n')
         for (exp_name, trace) in train_traces.iteritems():
             for (n, value) in enumerate(trace):
-                R_train.write(exp_name+' '+str(n)+' '+str(value)+' ' + str(rep) +'\n')
+                R_train.write(exp_name+' '+str(n*MEASURE_SKIP)+' '+str(value)+' ' + str(rep) +' ' + method + '\n')
 
         for (exp_name, loss) in test_losses.iteritems():
-            R_test.write(exp_name + ' ' + str(loss) + ' ' + str(rep) + '\n')
+            R_test.write(exp_name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
     
     R_vali.close()
     R_train.close()
     R_test.close()
 
     return True
+
+## actually run !!! ###
+if len(sys.argv) == 3:
+    print 'Getting system arguments!'
+    d=int(sys.argv[1])
+    noise=float(sys.argv[2])
+    print 'Dimension:', d
+    print 'Noise:', noise
+    main(d=d, noise=noise)
