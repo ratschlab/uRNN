@@ -103,7 +103,8 @@ def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1, noise=
 
     x = np.random.normal(size=(num_examples, d)) + 1j*np.random.normal(size=(num_examples, d))
     y = np.dot(x, U.T)
-    if not noise is None:
+    if noise > 0:
+        print 'Adding noise...'
         y += np.random.normal(scale=noise) + 1j*np.random.normal(scale=noise)
 
     batches = create_batches(x, y, batch_size, num_batches, num_epochs)
