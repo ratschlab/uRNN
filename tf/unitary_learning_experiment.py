@@ -432,6 +432,10 @@ def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN_vanilla', '
         for (exp_name, loss) in test_losses.iteritems():
             R_test.write(exp_name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
     
+        R_vali.flush()
+        R_train.flush()
+        R_test.flush()
+
     R_vali.close()
     R_train.close()
     R_test.close()
