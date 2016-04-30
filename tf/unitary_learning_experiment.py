@@ -303,7 +303,7 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN_vanilla', 'complex_RNN', 'general_unitary'], method=None, n_reps=9, n_epochs=None, noise=0.01):
+def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01):
     """
     For testing, right now.
     """
@@ -317,13 +317,17 @@ def main(d=5, experiments=['free_matrix', 'projection', 'complex_RNN_vanilla', '
     experiment_settings = 'output/simple/d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
 
     # save to an R-plottable file because I am so very lazy
-    R_vali = open(experiment_settings+'_vali.txt', 'w')
-    R_train = open(experiment_settings+'_train.txt', 'w')
-    R_test = open(experiment_settings+'_test.txt', 'w')
+    R_vali = open(experiment_settings+'_vali.txt', 'a')
+    R_train = open(experiment_settings+'_train.txt', 'a')
+    R_test = open(experiment_settings+'_test.txt', 'a')
     header = 'experiment training_examples loss rep method'
     R_vali.write(header+'\n')
     R_train.write(header+'\n')
-    R_test.write('experiment loss rep\n')
+    R_test.write('experiment loss rep method\n')
+
+    R_vali.flush()
+    R_train.flush()
+    R_test.flush()
 
     # some parallelism
     pool = Pool(NUM_WORKERS)
