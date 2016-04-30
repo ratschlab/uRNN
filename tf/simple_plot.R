@@ -2,17 +2,18 @@ library(ggplot2)
 
 args<-commandArgs(TRUE)
 PLOT_TRAIN<-FALSE
-#d<-args[1]
-d<-5
 
-fname_base<-paste0('output/simple_qr_d', d, '_bn100_nb10000_')
+d<-args[1]
+noise<-args[2]
 
-#fname<-'output/simple_lie_algebra_d1_bn100_nb10000_train.txt'
+fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
+print(fname_base)
 
 # --- vali --- #
 fname<-paste0(fname_base, 'vali.txt')
 data<-read.table(fname, header=T)
 data['rep']<-NULL
+data['method']<-NULL
 
 ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom")
 ggsave(gsub(".txt", ".png", fname))
