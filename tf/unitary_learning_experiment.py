@@ -19,7 +19,8 @@ import sys
 
 from data import generate_unitary_learning, create_batches
 from unitary import unitary_matrix, project_to_unitary
-from scipy.fftpack import fft2, ifft2
+#from scipy.fftpack import fft2, ifft2
+from scipy.fftpack import fft, ifft
 from functools import partial
 from multiprocessing import Pool
 from random import sample
@@ -145,12 +146,14 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=True):
 
     # === do the transformation === #
     step1 = np.dot(x, diag1)
-    step2 = fft2(step1)
+    #step2 = fft2(step1)
+    step2 = fft(step1)
     step3 = do_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
     #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
-    step6 = ifft2(step5)
+    #step6 = ifft2(step5)
+    step6 = ifft(step5)
     step7 = do_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
     #step7 = step6
     step8 = np.dot(step7, diag3)
@@ -303,7 +306,7 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01):
+def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01):
     """
     For testing, right now.
     """
@@ -314,7 +317,7 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs
     
-    experiment_settings = 'output/simple/d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    experiment_settings = 'output/simple/fft_d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
 
     # save to an R-plottable file because I am so very lazy
     R_vali = open(experiment_settings+'_vali.txt', 'a')
@@ -350,8 +353,11 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
         test_batch = batches[1]
         random_test_loss = random_baseline(test_batch, method=method)
         test_losses['random_unitary'] = random_test_loss
+        R_test.write('random_unitary ' + str(random_test_loss) + ' ' + str(rep) + ' ' + method +'\n')
         true_test_loss = true_baseline(U, test_batch)
         test_losses['true'] = true_test_loss
+        R_test.write('true ' + str(true_test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+        R_test.flush()
 
         if 'trivial' in experiments:
             print 'Running "trivial" experiment!'
@@ -363,6 +369,9 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             train_traces['trivial'] = train_trace
             vali_traces['trivial'] = vali_trace
             test_losses['trivial'] = test_loss
+            # save now
+            R_test.write('trivial ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
         if 'free_matrix' in experiments:
             print 'Running "free_matrix" experiment!'
             loss_fn = free_matrix_loss
@@ -373,6 +382,8 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             train_traces['free_matrix'] = train_trace
             vali_traces['free_matrix'] = vali_trace
             test_losses['free_matrix'] = test_loss
+            R_test.write('free_matrix ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
         if 'projection' in experiments:
             print 'Running "projection" experiment!'
             # (this is just free_matrix with reprojecting to unitary...)
@@ -384,6 +395,8 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             train_traces['projection'] = train_trace
             vali_traces['projection'] = vali_trace
             test_losses['projection'] = test_loss
+            R_test.write('projection ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
         if 'complex_RNN_vanilla' in experiments:
             print 'Running "complex_RNN_vanilla" experiment!'
             permutation = np.random.permutation(np.eye(d))
@@ -398,6 +411,8 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             train_traces['complex_RNN_vanilla'] = train_trace
             vali_traces['complex_RNN_vanilla'] = vali_trace
             test_losses['complex_RNN_vanilla'] = test_loss
+            R_test.write('complex_RNN_vanilla ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
         if 'complex_RNN' in experiments:
             print 'Running "complex_RNN" experiment!'
             permutation = np.random.permutation(np.eye(d))
@@ -412,6 +427,8 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             train_traces['complex_RNN'] = train_trace
             vali_traces['complex_RNN'] = vali_trace
             test_losses['complex_RNN'] = test_loss
+            R_test.write('complex_RNN ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
         if 'general_unitary' in experiments:
             print 'Running "general_unitary" experiment!'
             loss_fn = general_unitary_loss
@@ -422,7 +439,9 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             train_traces['general_unitary'] = train_trace
             vali_traces['general_unitary'] = vali_trace
             test_losses['general_unitary'] = test_loss
-
+            R_test.write('general_unitary ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
+ 
         print test_losses
 
         # save trace (only when comparison is fully done)
@@ -433,9 +452,6 @@ def main(d=5, experiments=['projection', 'complex_RNN_vanilla', 'complex_RNN', '
             for (n, value) in enumerate(trace):
                 R_train.write(exp_name+' '+str(n*MEASURE_SKIP)+' '+str(value)+' ' + str(rep) +' ' + method + '\n')
 
-        for (exp_name, loss) in test_losses.iteritems():
-            R_test.write(exp_name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
-    
         R_vali.flush()
         R_train.flush()
         R_test.flush()
