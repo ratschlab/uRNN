@@ -146,19 +146,11 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=True):
 
     # === do the transformation === #
     step1 = np.dot(x, diag1)
-<<<<<<< HEAD
-    #step2 = fft2(step1)
-=======
->>>>>>> 60cb13757ddc4a3a2ae035e9a000c6991859f74d
     step2 = fft(step1)
     step3 = do_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
     #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
-<<<<<<< HEAD
-    #step6 = ifft2(step5)
-=======
->>>>>>> 60cb13757ddc4a3a2ae035e9a000c6991859f74d
     step6 = ifft(step5)
     step7 = do_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
     #step7 = step6
@@ -336,7 +328,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     R_train.flush()
     R_test.flush()
     # put together
-    loginfo = {'vali_file': R_vali, 'train_file': R_train, 'test_file': R_test, 'exp_name': None, 'rep': None, 'method':, None}
+    loginfo = {'vali_file': R_vali, 'train_file': R_train, 'test_file': R_test, 'exp_name': None, 'rep': None, 'method': None}
 
     # some parallelism
     pool = Pool(NUM_WORKERS)
@@ -445,23 +437,10 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
  
         print test_losses
 
-<<<<<<< HEAD
-        # save trace (only when comparison is fully done)
-        for (exp_name, trace) in vali_traces.iteritems():
-            for (n, value) in enumerate(trace):
-                R_vali.write(exp_name+' '+str(n*MEASURE_SKIP)+' '+str(value)+' ' + str(rep)+' ' + method+'\n')
-        for (exp_name, trace) in train_traces.iteritems():
-            for (n, value) in enumerate(trace):
-                R_train.write(exp_name+' '+str(n*MEASURE_SKIP)+' '+str(value)+' ' + str(rep) +' ' + method + '\n')
-
-        R_vali.flush()
-        R_train.flush()
-=======
         # save test things...
         for (exp_name, loss) in test_losses.iteritems():
             R_test.write(exp_name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
     
->>>>>>> 60cb13757ddc4a3a2ae035e9a000c6991859f74d
         R_test.flush()
 
     R_vali.close()
