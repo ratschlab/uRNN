@@ -360,7 +360,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
 
         if 'trivial' in experiments:
             print 'Running "trivial" experiment!'
-            loginfo['experiment'] = 'trivial'
+            loginfo['exp_name'] = 'trivial'
             loss_fn = trivial_loss
             initial_parameters = np.random.normal(size=d) + 1j*np.random.normal(size=d)
             # actually run
@@ -372,7 +372,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             R_test.flush()
         if 'free_matrix' in experiments:
             print 'Running "free_matrix" experiment!'
-            loginfo['experiment'] = 'free_matrix'
+            loginfo['exp_name'] = 'free_matrix'
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
@@ -383,7 +383,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             R_test.flush()
         if 'projection' in experiments:
             print 'Running "projection" experiment!'
-            loginfo['experiment'] = 'projection'
+            loginfo['exp_name'] = 'projection'
             # (this is just free_matrix with reprojecting to unitary...)
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
@@ -395,7 +395,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             R_test.flush()
         if 'complex_RNN_vanilla' in experiments:
             print 'Running "complex_RNN_vanilla" experiment!'
-            loginfo['experiment'] = 'complex_RNN_vanilla'
+            loginfo['exp_name'] = 'complex_RNN_vanilla'
             permutation = np.random.permutation(np.eye(d))
             loss_fn = partial(complex_RNN_loss, 
                               permutation=permutation,
@@ -410,7 +410,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             R_test.flush()
         if 'complex_RNN' in experiments:
             print 'Running "complex_RNN" experiment!'
-            loginfo['experiment'] = 'complex_RNN'
+            loginfo['exp_name'] = 'complex_RNN'
             permutation = np.random.permutation(np.eye(d))
             loss_fn = partial(complex_RNN_loss, 
                               permutation=permutation,
@@ -425,7 +425,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             R_test.flush()
         if 'general_unitary' in experiments:
             print 'Running "general_unitary" experiment!'
-            loginfo['experiment'] = 'general_unitary'
+            loginfo['exp_name'] = 'general_unitary'
             loss_fn = general_unitary_loss
             initial_parameters = np.random.normal(size=d*d)
             # actually run
