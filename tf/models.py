@@ -387,7 +387,8 @@ class uRNNCell(steph_RNNCell):
         # TODO: think about how to get real outputs
         with vs.variable_scope(scope):
             # probably using sigmoid?
-            new_state = tf.nn.sigmoid(unitary(state, self._state_size, scope='Unitary/Transition') + tf.complex(linear(inputs, self._state_size, bias=True, scope='Linear/Transition'), 0))
+            new_state = tf.nn.sigmoid(linear(inputs, self._state_size, bias=True, scope='Unitary/FoldIn', dtype=self._state_dtype) + linear(state, self._state_size, bias=False, scope='Unitary/Transition', dtype=tf.complex64))
+#            new_state = tf.nn.sigmoid(unitary(state, self._state_size, scope='Unitary/Transition') + tf.complex(linear(inputs, self._state_size, bias=True, scope='Linear/Transition'), 0))
             output_complex = linear(new_state, self._output_size, bias=True, scope='Linear/Output', dtype=tf.complex64)
             # for now, output is modulus...
             output = tf.sqrt(tf.real(output_complex)**2 + tf.imag(output_complex)**2)
