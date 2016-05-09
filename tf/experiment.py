@@ -20,7 +20,7 @@ from time import time
 # local imports
 from models import RNN
 from data import ExperimentData
-from unitary import U_from_grads
+from unitary_np import U_from_grads
 
 # === constants === #
 N_TRAIN = int(1e5)
@@ -85,10 +85,7 @@ def get_gradients(opt, cost, clipping=False, variables=None):
     return g_and_v
 
 def update_variables(opt, g_and_v, v_and_newv=[]):
-    """
-    Note, list of variables where you can juset *set* their value.
-    """
-    train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
+    # TODO: fix this what
     # YOLO
 #    print v_and_newv
 #    print v_and_newv[0][0].get_shape()
@@ -96,10 +93,14 @@ def update_variables(opt, g_and_v, v_and_newv=[]):
     # DEYOLO
     for (v, newv) in v_and_newv:
         # YOLO
+        print v
+        print newv
+        # Ywat
         print newv.get_shape()
         # DEYOLO
         print v.get_shape()
         v.assign(newv)
+    train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
      
 # do everything all at once
@@ -191,12 +192,12 @@ def main(experiment='adding', batch_size=10, state_size=20,
         g_and_v_nonU = get_gradients(opt, cost, gradient_clipping, nonU_variables)
         g_and_v_U = get_gradients(opt, cost, gradient_clipping, U_variable)
         # YOLO
-        print g_and_v_U[0][1]
-        print g_and_v_U[0][1].get_shape()
-        print U_new.get_shape()
-        U_variable[0].assign(g_and_v_U[0][1])
-#        v_and_newv = [U_variable[0], g_and_v_U[0][0]]
-        train_op = update_variables(opt, g_and_v_nonU)
+#        print g_and_v_U[0][1]
+#        print g_and_v_U[0][1].get_shape()
+#        print U_new.get_shape()
+#        U_variable[0].assign(U_new)
+        v_and_newv = [U_variable[0], U_new]
+        train_op = update_variables(opt, g_and_v_nonU, v_and_newv)
         # DEYOLO
         #train_op = update_variables(opt, g_and_v_nonU, [g_and_v_U[0][1], U_new])
     else:
@@ -224,9 +225,8 @@ def main(experiment='adding', batch_size=10, state_size=20,
                     # CONTINUE GRADIENT HACKS
                     # YOLO
                     U_grad = session.run([g_and_v_U[0][0]], {x:batch_x, y:batch_y})
-                    U_new, lambdas = U_from_grads(U_grad, lambdas)
-                    pdb.set_trace()
-                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y:batch_y, U_new: U_new})
+                    U_new_array, lambdas = U_from_grads(U_grad[0], lambdas)
+                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y:batch_y, U_new: U_new_array})
                 # DEYOLO
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
