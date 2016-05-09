@@ -38,7 +38,7 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False):
         or create a basis-element generator
     """
     lie_algebra_dim = n*n
-    assert len(lambdas) = lie_algebra_dim
+    assert len(lambdas) == lie_algebra_dim
 
     L = np.zeros(shape=(n, n), dtype=complex)
 
@@ -200,11 +200,17 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
 # === some grad hacks === #
 def U_from_grads(U_grad, lambdas):
     """
-    TODO: all
     TODO: update name
+    TODO: make fast
     """
-    # YOLO FOR NOW
     # --- get new lambdas
     n = U_grad.shape[0]
-    # --- todo: finish
-    return np.random.normal(size=U_grad.shape)
+    U = expm(lie_algebra_element(n, lambdas))
+    # POTENTIAL FOR PARALLELISATION HERE (should really)
+    # (not sure how well multiprocessing will play with tf)
+    # TODO: this part
+    delta_lambdas = lambdas + 0.5 
+    # back to normal
+    lambdas += delta_lambdas
+    U_new = expm(lie_algebra_element(n, lambdas))
+    return U_new, lambdas
