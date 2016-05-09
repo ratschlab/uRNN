@@ -20,6 +20,7 @@ from time import time
 # local imports
 from models import RNN
 from data import ExperimentData
+from unitary import U_from_grads
 
 # === constants === #
 N_TRAIN = int(1e5)
@@ -60,6 +61,48 @@ def get_cost(outputs, y, loss_type='MSE'):
         raise NotImplementedError
     return cost
 
+# == some gradient-specific fns == #
+def create_optimiser(learning_rate):
+    print 'WARNING: RMSProp does not support complex variables!'
+    # TODO: add complex support to RMSProp
+    # decay and momentum are copied from theano version values
+    opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate,
+                                    decay=0.9,
+                                    momentum=0.0)
+    return opt
+
+def get_gradients(opt, cost, clipping=False, variables=None):
+    if variables is None:
+        gradient_variables = tf.trainable_variables()
+    else:
+        gradient_variables = variables
+    print 'Calculating gradients of cost with respect to Variables:'
+    for var in gradient_variables:
+        print var.name, var.dtype
+    g_and_v = opt.compute_gradients(cost, gradient_variables)
+    if clipping:
+        g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
+    return g_and_v
+
+def update_variables(opt, g_and_v, v_and_newv=[]):
+    """
+    Note, list of variables where you can juset *set* their value.
+    """
+    train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
+    # YOLO
+#    print v_and_newv
+#    print v_and_newv[0][0].get_shape()
+#    print v_and_newv[0][1].get_shape()
+    # DEYOLO
+    for (v, newv) in v_and_newv:
+        # YOLO
+        print newv.get_shape()
+        # DEYOLO
+        print v.get_shape()
+        v.assign(newv)
+    return train_opt
+     
+# do everything all at once
 def update_step(cost, learning_rate=0.01, clipping=False):
     print 'WARNING: RMSProp does not support complex variables!'
     # TODO: add complex support to RMSProp
@@ -77,7 +120,7 @@ def update_step(cost, learning_rate=0.01, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-
+# == and now for main == #
 def main(experiment='adding', batch_size=10, state_size=20, 
          num_epochs=5, T=100, learning_rate=0.001,
          model='tanhRNN', timestamp=False):
@@ -127,7 +170,38 @@ def main(experiment='adding', batch_size=10, state_size=20,
 
     # === ops and things === #
     cost = get_cost(outputs, y, loss_type)
-    train_op = update_step(cost, learning_rate, gradient_clipping)
+    # YOLO testing separating gradient steps
+    # TODO: omg wow
+    opt = create_optimiser(learning_rate)
+    # YOLO
+    #if model == 'uRNN':
+    if model == 'tanhRNN':
+        # COMMENCE GRADIENT HACKS
+        nonU_variables = []
+        lambdas = np.random.normal(size=(state_size*state_size))
+        # TODO: get proper name (for now tanhRNN var for testing)...
+        U_name = 'RNN/tanhRNN/Linear/Transition/Matrix:0' 
+        for var in tf.trainable_variables():
+            if var.name == U_name:
+                U_variable = [var]
+            else:
+                nonU_variables.append(var)
+        # YOLO dtype
+        U_new = tf.placeholder(dtype=tf.float32, shape=U_variable[0].get_shape())
+        g_and_v_nonU = get_gradients(opt, cost, gradient_clipping, nonU_variables)
+        g_and_v_U = get_gradients(opt, cost, gradient_clipping, U_variable)
+        # YOLO
+        print g_and_v_U[0][1]
+        print g_and_v_U[0][1].get_shape()
+        print U_new.get_shape()
+        U_variable[0].assign(g_and_v_U[0][1])
+#        v_and_newv = [U_variable[0], g_and_v_U[0][0]]
+        train_op = update_variables(opt, g_and_v_nonU)
+        # DEYOLO
+        #train_op = update_variables(opt, g_and_v_nonU, [g_and_v_U[0][1], U_new])
+    else:
+        # nothing special here, movin' along...
+        train_op = update_step(cost, learning_rate, gradient_clipping)
 
     # === for checkpointing the model === #
     saver = tf.train.Saver()
@@ -144,7 +218,16 @@ def main(experiment='adding', batch_size=10, state_size=20,
             for batch_index in xrange(num_batches):
                 # definitely scope for fancy iterator but yolo
                 batch_x, batch_y = train_data.get_batch(batch_index, batch_size)
-            
+           
+                #if model == 'uRNN':
+                if model == 'tanhRNN':
+                    # CONTINUE GRADIENT HACKS
+                    # YOLO
+                    U_grad = session.run([g_and_v_U[0][0]], {x:batch_x, y:batch_y})
+                    U_new, lambdas = U_from_grads(U_grad, lambdas)
+                    pdb.set_trace()
+                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y:batch_y, U_new: U_new})
+                # DEYOLO
                 train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
                 print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
