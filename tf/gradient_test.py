@@ -1,7 +1,12 @@
 #!/usr/bin/env ipython
 #
-# Script to test when/if I can truncate the infinite sum for calculating the gradient.
-# aka maths is hard, code is easy
+#
+# Scripts to help me find a good approximation to the gradient of exp(L).
+# Specifically:
+#   Script to test when/if I can truncate the infinite sum for calculating the gradient.
+#       aka maths is hard, code is easy
+#   Script to check difference between gradients obtained numerically and using
+#       whatever approximation...
 #
 # ------------------------------------------
 # author:       Stephanie Hyland (@corcra)
@@ -10,17 +15,24 @@
 #
 
 import numpy as np
-from math import factorial
+from scipy.misc import factorial
 from scipy.linalg import expm
 import unitary
 import pdb
 
-# === CONSTANTS === #
+EPSILON=1e-5
+# === wat === #
+# (i am doing myself a regret)
+DO_LTL_NORMS = False
+DO_UT_TU_HACK = True
+
+# === relating to the LTL sum thing === #
+# == CONSTANTS == #
 J_MAX = 100
 N_REPS = 20
 
-# === SETUP === #
-def setup(n):
+# == SETUP == #
+def get_L_and_Ts(n):
     # (I have irritatingly written a random set of the unitary functions for tf)
     # get the the basis set (so inefficient!)
     Ts = np.zeros(shape=(n*n, n, n), dtype=complex)
@@ -32,13 +44,32 @@ def setup(n):
     lambdas = np.random.normal(size=(n*n))
     L = np.einsum('i,ijk', lambdas, Ts)
 
-    # select a random element of Ts
-    i = np.random.choice(n*n)
-    T = Ts[i, :, :]
-    return L, T
+    return L, Ts
 
-# === GET TRACE === #
-def get_trace(L, T, J_MAX):
+# == the accumulator on its own == #
+def get_LTL(L, T, J):
+    # (so inefficient)
+    n = L.shape[0]
+    # trace will store np.mean(L^{j-a} T L^a)/j!
+    trace = [0]*J_MAX
+    # generate powers of L as we go along
+    L_powers = np.zeros(shape=(J_MAX, n, n), dtype=complex)
+    L_powers[0] = np.eye(n)
+    trace[0] = 1
+    #trace[1] = np.linalg.norm(np.mean(np.dot(L, T)))
+    trace[1] = trace[0] + np.linalg.norm(np.mean(np.dot(L, L)))
+    L_powers[1] = L
+    for j in xrange(2, J):
+        L_powers[j] = np.dot(L, L_powers[j-1])
+    # now get the accumulator
+    LTL = np.zeros_like(L)
+    for a in xrange(J):
+        LTL += np.dot(np.dot(L_powers[J-a], L), L_powers[a])
+    LTL = LTL/factorial(J)
+    return LTL
+
+# == GET TRACE == #
+def get_LTL_norm_trace(L, T, J_MAX):
     # (so inefficient)
     n = L.shape[0]
     # trace will store np.mean(L^{j-a} T L^a)/j!
@@ -64,12 +95,14 @@ def get_trace(L, T, J_MAX):
             pdb.set_trace()
     return trace
 
-# === GET COMBOTRACE === #
-def get_combotrace(N, N_REPS, f=None):
+# == GET COMBOTRACE == #
+def get_multiple_LTL_norm_traces(N, N_REPS, f=None):
     combo_trace = np.zeros(shape=(J_MAX, N_REPS))
     for l in xrange(N_REPS):
-        L, T = setup(N)
-        trace = get_trace(L, T, J_MAX)
+        L, Ts = get_L_and_Ts(N)
+        i = np.random.choice(n*n)
+        T = Ts[i, :, :]
+        trace = get_LTL_norm_trace(L, T, J_MAX)
         assert len(trace) == J_MAX
         if f is not None:
             for (j, t) in enumerate(trace):
@@ -83,10 +116,30 @@ def get_combotrace(N, N_REPS, f=None):
             print m, s
     return combo_trace
 
-# === another outer loop === #
-fout = open('gradient_test_traces.txt', 'w')
-fout.write('j d rep val\n')
-for n in [1, 2, 5, 10, 15, 25, 50]:
-    print n
-    ct = get_combotrace(n, N_REPS, fout)
-fout.close()
+# === MAIN === #
+if DO_LTL_NORMS:
+    fout = open('gradient_test_traces.txt', 'w')
+    fout.write('j d rep val\n')
+    for n in [1, 2, 5, 10, 15, 25, 50]:
+        print n
+        ct = get_multiple_LTL_norm_traces(n, N_REPS, fout)
+    fout.close()
+
+if DO_UT_TU_HACK:
+    n = 5
+    J = 13
+    L, Ts = get_L_and_Ts(n)
+    U = expm(L)
+#    hack_gradients = np.array([np.dot(U, T) + np.dot(T, U) for T in Ts])
+#    hack_gradients = np.array([get_LTL(L, T, J) for T in Ts])
+    hack_gradients = np.array([np.dot(L, T) - np.dot(T, L) for T in Ts])
+    numerical_gradients = np.array([(expm(L + EPSILON*T) - expm(L))/EPSILON for T in Ts])
+    differences = hack_gradients - numerical_gradients
+    pdb.set_trace()
+    print 'hacks'
+    print np.linalg.norm(hack_gradients, ord='fro', axis=(1, 2))
+    print 'numerical'
+    print np.linalg.norm(numerical_gradients, ord='fro', axis=(1, 2))
+    print 'differences'
+    print np.linalg.norm(differences, ord='fro', axis=(1, 2))
+    pdb.set_trace()
