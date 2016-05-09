@@ -18,7 +18,7 @@ import cPickle
 import sys
 
 from data import generate_unitary_learning, create_batches
-from unitary import unitary_matrix, project_to_unitary
+from unitary_np import unitary_matrix, project_to_unitary
 #from scipy.fftpack import fft2, ifft2
 from scipy.fftpack import fft, ifft
 from functools import partial
