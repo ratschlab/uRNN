@@ -236,14 +236,15 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo, LEARNI
 
     for (i, batch) in enumerate(batches):
         loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch, pool)
+        batch_size = batch.shape[0]
         if i % MEASURE_SKIP == 0:
             # only record some of the points, for memory efficiency
-            loginfo['train_file'].write(loginfo['exp_name']+' '+str(i*MEASURE_SKIP)+' '+str(loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+            loginfo['train_file'].write(loginfo['exp_name']+' '+str((i + 1)*batch_size)+' '+str(loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
             if not vali_data is None:
                 vali_loss = loss_function(parameters, vali_data)
                 if i % (MEASURE_SKIP*4) == 0:
                     print i, '\t\tVALI:', vali_loss
-                loginfo['vali_file'].write(loginfo['exp_name']+' '+str(i*MEASURE_SKIP)+' '+str(vali_loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+                loginfo['vali_file'].write(loginfo['exp_name']+' '+str((i + 1)*batch_size)+' '+str(vali_loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
         # *now* update parameters
         parameters = parameters - LEARNING_RATE*parameters_gradient
         if PROJECT_TO_UNITARY:
@@ -318,7 +319,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     R_train = open(experiment_settings+'_train.txt', 'a')
     R_test = open(experiment_settings+'_test.txt', 'a')
     # headers
-    header = 'experiment batches loss rep method'
+    header = 'experiment training_examples loss rep method'
     R_vali.write(header+'\n')
     R_train.write(header+'\n')
     R_test.write('experiment loss rep method\n')
