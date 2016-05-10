@@ -43,15 +43,15 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False):
     L = np.zeros(shape=(n, n), dtype=complex)
 
     for e in xrange(0, lie_algebra_dim):
-        T_re, T_im = lie_algebra_basis_element(n, e)
-        L += lambdas[e]*T_re + 1j*lambdas[e]*T_im
+        T = lie_algebra_basis_element(n, e, complex_out=True)
+        L += lambdas[e]*T
     
     if check_skew_hermitian:
         assert np.array_equal(np.transpose(np.conjugate(L)), -L)
 
     return L
 
-def lie_algebra_basis_element(n, e, check_skew_hermitian=False):
+def lie_algebra_basis_element(n, e, check_skew_hermitian=False, complex_out=False):
     """
     Return a *single* element (the e-th one) of a basis of u(n).
     See lie_algebra_basis for more details.
@@ -82,7 +82,10 @@ def lie_algebra_basis_element(n, e, check_skew_hermitian=False):
     if check_skew_hermitian:
         basis_matrix = T_re + 1j*T_im
         assert np.array_equal(np.transpose(np.conjugate(basis_matrix)), -basis_matrix)
-    return T_re, T_im
+    if complex_out:
+        return T_re + 1j*T_im
+    else:
+        return T_re, T_im
 
 def lie_algebra_basis(n):
     """
@@ -198,19 +201,30 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
     return U
 
 # === some grad hacks === #
-def U_from_grads(U_grad, lambdas):
+def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, EPSILON=1e-5):
     """
     TODO: update name
     TODO: make fast
     """
-    # --- get new lambdas
-    n = U_grad.shape[0]
-    U = expm(lie_algebra_element(n, lambdas))
+    # first term (d cost / d U)
+    assert dcost_dU_re.shape == dcost_dU_im.shape
+    dcost_dU = dcost_dU_re + 1j*dcost_dU_im
+    n = dcost_dU.shape[0]
+    assert len(lambdas) == n*n
+
+    # second term (d U / d lambdas)
+    # meanwhile update lambdas
+    L = lie_algebra_element(n, lambdas)
+    U = expm(L)
     # POTENTIAL FOR PARALLELISATION HERE (should really)
     # (not sure how well multiprocessing will play with tf)
-    # TODO: this part
-    delta_lambdas = lambdas + 0.5 
-    # back to normal
-    lambdas += delta_lambdas
+    for e in xrange(n*n):
+        dU_dlambda = (expm(L + EPSILON*lie_algebra_basis_element(n, e, complex_out=True)) - U)/EPSILON
+        # TODO: hmm, how do we ensure that delta lambda is REAL?
+        delta = np.abs(np.trace(np.dot(dcost_dU, dU_dlambda)))
+        lambdas[e] += delta
+    
+    # having updated the lambdas, get new U
     U_new = expm(lie_algebra_element(n, lambdas))
-    return U_new, lambdas
+
+    return np.real(U_new), np.imag(U_new), lambdas
