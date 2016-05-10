@@ -290,7 +290,8 @@ class tanhRNNCell(steph_RNNCell):
             output = linear(state)
         """
         with vs.variable_scope(scope):
-            new_state = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition'))
+            #new_state = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition'))
+            new_state = tf.tanh(linear([inputs], self._state_size, bias=True, scope='Linear/FoldIn') + linear([state], self._state_size, bias=False, scope='Linear/Transition'))
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
