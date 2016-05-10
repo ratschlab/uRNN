@@ -84,25 +84,17 @@ def get_gradients(opt, cost, clipping=False, variables=None):
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
     return g_and_v
 
-def update_variables(opt, g_and_v, v_and_newv=[]):
-    # TODO: fix this what
-    # YOLO
-#    print v_and_newv
-#    print v_and_newv[0][0].get_shape()
-#    print v_and_newv[0][1].get_shape()
-    # DEYOLO
-    for (v, newv) in v_and_newv:
-        # YOLO
-        print v
-        print newv
-        # Ywat
-        print newv.get_shape()
-        # DEYOLO
-        print v.get_shape()
-        v.assign(newv)
+def update_variables(opt, g_and_v):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
-     
+    
+def assign_variable(v, newv):
+    """
+    Just assign a single variable.
+    """
+    assign_opt = v.assign(newv)
+    return assign_opt
+    
 # do everything all at once
 def update_step(cost, learning_rate=0.01, clipping=False):
     print 'WARNING: RMSProp does not support complex variables!'
@@ -125,14 +117,12 @@ def update_step(cost, learning_rate=0.01, clipping=False):
 def main(experiment='adding', batch_size=10, state_size=20, 
          num_epochs=5, T=100, learning_rate=0.001,
          model='tanhRNN', timestamp=False):
-    # TESTING: YOLO TODO
     # randomly select experiment
     if np.random.random() < 0.5:
         experiment = 'adding'
     else:
         experiment = 'memory'
     print 'running', experiment, 'experiment with', model
-    # DEYOLO
     # === derivative options/values === #
     gradient_clipping = True
     if model == 'complex_RNN':
@@ -184,22 +174,16 @@ def main(experiment='adding', batch_size=10, state_size=20,
         U_name = 'RNN/tanhRNN/Linear/Transition/Matrix:0' 
         for var in tf.trainable_variables():
             if var.name == U_name:
-                U_variable = [var]
+                U_variable = var
             else:
                 nonU_variables.append(var)
         # YOLO dtype
-        U_new = tf.placeholder(dtype=tf.float32, shape=U_variable[0].get_shape())
+        U_new = tf.placeholder(dtype=tf.float32, shape=U_variable.get_shape())
         g_and_v_nonU = get_gradients(opt, cost, gradient_clipping, nonU_variables)
-        g_and_v_U = get_gradients(opt, cost, gradient_clipping, U_variable)
+        g_and_v_U = get_gradients(opt, cost, gradient_clipping, [U_variable])
         # YOLO
-#        print g_and_v_U[0][1]
-#        print g_and_v_U[0][1].get_shape()
-#        print U_new.get_shape()
-#        U_variable[0].assign(U_new)
-        v_and_newv = [U_variable[0], U_new]
-        train_op = update_variables(opt, g_and_v_nonU, v_and_newv)
-        # DEYOLO
-        #train_op = update_variables(opt, g_and_v_nonU, [g_and_v_U[0][1], U_new])
+        train_op = update_variables(opt, g_and_v_nonU)
+        assign_op = assign_variable(U_variable, U_new)
     else:
         # nothing special here, movin' along...
         train_op = update_step(cost, learning_rate, gradient_clipping)
@@ -223,12 +207,13 @@ def main(experiment='adding', batch_size=10, state_size=20,
                 #if model == 'uRNN':
                 if model == 'tanhRNN':
                     # CONTINUE GRADIENT HACKS
-                    # YOLO
+                    # YOLO (this part might be absurdly expensive)
                     U_grad = session.run([g_and_v_U[0][0]], {x:batch_x, y:batch_y})
                     U_new_array, lambdas = U_from_grads(U_grad[0], lambdas)
-                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y:batch_y, U_new: U_new_array})
-                # DEYOLO
-                train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
+                    train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_array})
+                else:
+                    # DEYOLO
+                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
                 print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
                 if batch_index % 50 == 0:
