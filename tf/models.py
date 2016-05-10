@@ -201,6 +201,51 @@ def linear(args, output_size, bias, bias_start=0.0,
         bias_term = vs.get_variable("Bias", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
     return res + bias_term
 
+def linear_complex(arg, output_size, bias, bias_start=0.0, 
+           scope=None, identity=-1, dtype=tf.float32):
+    """
+    NOTE: arg is a single arg, because that's how it is
+
+    Linear map:
+                arg * W where W is complex, but really:
+            W_re * arg_re - W_im * arg_im + i (W_re * arg_im + W_im * arg_re)
+                where W_re, W_im are Variables
+    Args:
+        arg:            a 2D Tensor (batch x n))))
+        output_size:    int, second dimension of W[i].
+        bias:           boolean, whether to add a bias term or not.
+        bias_start:     starting value to initialize the bias; 0 by default.
+        scope:          VariableScope for the created subgraph; defaults to "LinearComplex".
+        identity:       which matrix corresponding to inputs should be initialised to identity?
+        dtype:          data type of linear operators
+
+    Returns:
+        2D tensor with shape [batch x output_size] equal to arg * W
+    Raises:
+        ValueError: if some of the arguments has unspecified or wrong shape.
+  """
+    assert arg
+    shape = arg.get_shape().as_list()
+    if len(shape) != 2:
+        raise ValueError("LinearComplex is expecting a 2D argument")
+    n = shape[1]
+
+    arg_re = tf.real(arg)
+    arg_im = tf.imag(arg)
+
+    # Now the computation.
+    with vs.variable_scope(scope or "LinearComplex"):
+        matrix_re = vs.get_variable("Matrix/Real", dtype=dtype, initializer=fixed_initializer([n], output_size, identity, dtype))
+        matrix_im = vs.get_variable("Matrix/Imaginary", dtype=dtype, initializer=fixed_initializer([n], output_size, identity, dtype))
+        res_re = tf.matmul(arg_re, matrix_re) - tf.matmul(arg_im, matrix_im)
+        res_im = tf.matmul(arg_im, matrix_re) + tf.matmul(arg_re, matrix_im)
+        if not bias:
+            return tf.complex(res_re, res_im)
+        else:
+            bias_re = vs.get_variable("Bias/Real", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
+            bias_im = vs.get_variable("Bias/Imaginary", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
+            return tf.complex(res_re + bias_re, res_im + bias_im)
+
 # === RNNs ! === #
 
 def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
@@ -385,14 +430,13 @@ class uRNNCell(steph_RNNCell):
         this unitary RNN shall be my one, once I figure it out I guess
         ... fun times ahead
         """
-        # TODO: think about how to get real outputs
-        # (for now:) cast inputs to complex
+        # TODO: think about outputs
+        # grr, so much splitting into real and imag
         inputs_complex = tf.complex(inputs, 0)
         with vs.variable_scope(scope):
             # probably using sigmoid?
-            new_state = tf.nn.sigmoid(linear(inputs_complex, self._state_size, bias=True, scope='Unitary/FoldIn', dtype=self._state_dtype) + linear(state, self._state_size, bias=False, scope='Unitary/Transition', dtype=self._state_dtype))
-#            new_state = tf.nn.sigmoid(unitary(state, self._state_size, scope='Unitary/Transition') + tf.complex(linear(inputs, self._state_size, bias=True, scope='Linear/Transition'), 0))
-            output_complex = linear(new_state, self._output_size, bias=True, scope='Linear/Output', dtype=tf.complex64)
+            new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
+            output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
             # for now, output is modulus...
-            output = tf.sqrt(tf.real(output_complex)**2 + tf.imag(output_complex)**2)
+            output = tf.sqrt(tf.real(output)**2 + tf.imag(output)**2)
         return output, new_state
