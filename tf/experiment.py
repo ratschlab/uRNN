@@ -20,7 +20,7 @@ from time import time
 # local imports
 from models import RNN
 from data import ExperimentData
-from unitary_np import U_from_grads
+from unitary_np import numgrad_lambda_update
 
 # === constants === #
 N_TRAIN = int(1e5)
@@ -161,29 +161,31 @@ def main(experiment='adding', batch_size=10, state_size=20,
 
     # === ops and things === #
     cost = get_cost(outputs, y, loss_type)
-    # YOLO testing separating gradient steps
-    # TODO: omg wow
     opt = create_optimiser(learning_rate)
-    # YOLO
-    #if model == 'uRNN':
-    if model == 'tanhRNN':
+    if model == 'uRNN':
         # COMMENCE GRADIENT HACKS
-        nonU_variables = []
         lambdas = np.random.normal(size=(state_size*state_size))
-        # TODO: get proper name (for now tanhRNN var for testing)...
-        U_name = 'RNN/tanhRNN/Linear/Transition/Matrix:0' 
+        U_re_name = 'RNN/uRNN/Unitary/Transition/Matrix/Real:0'
+        U_im_name = 'RNN/uRNN/Unitary/Transition/Matrix/Imaginary:0'
+        nonU_variables = []
         for var in tf.trainable_variables():
-            if var.name == U_name:
-                U_variable = var
+            if var.name == U_re_name:
+                U_re_variable = var
+            elif var.name == U_im_name:
+                U_im_variable = var
             else:
                 nonU_variables.append(var)
-        # YOLO dtype
-        U_new = tf.placeholder(dtype=tf.float32, shape=U_variable.get_shape())
+        U_variables = [U_re_variable, U_im_variable]
+        # WARNING: dtype
+        U_new_re = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
+        U_new_im = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
+        # get gradients (alternately: just store indices and separate afterwards)
         g_and_v_nonU = get_gradients(opt, cost, gradient_clipping, nonU_variables)
-        g_and_v_U = get_gradients(opt, cost, gradient_clipping, [U_variable])
-        # YOLO
+        g_and_v_U = get_gradients(opt, cost, gradient_clipping, U_variables)
+        # now for ops 
         train_op = update_variables(opt, g_and_v_nonU)
-        assign_op = assign_variable(U_variable, U_new)
+        assign_re_op = assign_variable(U_re_variable, U_new_re)
+        assign_im_op = assign_variable(U_im_variable, U_new_im)
     else:
         # nothing special here, movin' along...
         train_op = update_step(cost, learning_rate, gradient_clipping)
@@ -204,15 +206,13 @@ def main(experiment='adding', batch_size=10, state_size=20,
                 # definitely scope for fancy iterator but yolo
                 batch_x, batch_y = train_data.get_batch(batch_index, batch_size)
            
-                #if model == 'uRNN':
-                if model == 'tanhRNN':
+                if model == 'uRNN':
                     # CONTINUE GRADIENT HACKS
-                    # YOLO (this part might be absurdly expensive)
-                    U_grad = session.run([g_and_v_U[0][0]], {x:batch_x, y:batch_y})
-                    U_new_array, lambdas = U_from_grads(U_grad[0], lambdas)
-                    train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_array})
+                    # TODO: OPTIMISATION, TESTING
+                    dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
+                    U_new_re_array, U_new_im_array, lambdas = numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas)
+                    train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
                 else:
-                    # DEYOLO
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
                 print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
