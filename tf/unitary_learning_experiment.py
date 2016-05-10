@@ -19,7 +19,6 @@ import sys
 
 from data import generate_unitary_learning, create_batches
 from unitary_np import unitary_matrix, project_to_unitary
-#from scipy.fftpack import fft2, ifft2
 from scipy.fftpack import fft, ifft
 from functools import partial
 from multiprocessing import Pool
@@ -301,7 +300,7 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01):
+def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
     """
     For testing, right now.
     """
@@ -319,7 +318,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     R_train = open(experiment_settings+'_train.txt', 'a')
     R_test = open(experiment_settings+'_test.txt', 'a')
     # headers
-    header = 'experiment training_examples loss rep method'
+    header = 'experiment batches loss rep method'
     R_vali.write(header+'\n')
     R_train.write(header+'\n')
     R_test.write('experiment loss rep method\n')
@@ -328,12 +327,12 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     R_train.flush()
     R_test.flush()
     # put together
-    loginfo = {'vali_file': R_vali, 'train_file': R_train, 'test_file': R_test, 'exp_name': None, 'rep': None, 'method': None}
+    loginfo = {'vali_file': R_vali, 'train_file': R_train, 'exp_name': None, 'rep': None, 'method': None}
 
     # some parallelism
     pool = Pool(NUM_WORKERS)
 
-    for rep in xrange(n_reps):
+    for rep in xrange(start_from_rep, start_from_rep + n_reps):
         # randomly select the method
         method = sample(['lie_algebra', 'qr', 'composition'], 1)[0]
         print rep, ': generating U using:', method
