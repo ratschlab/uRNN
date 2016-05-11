@@ -274,6 +274,14 @@ def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=Tru
         print 'TEST:', test_loss
     else:
         test_loss = -1
+
+    if 'sparse' in loginfo['method'] and loginfo['exp'] == 'general_unitary':
+        nonzero_index = int(loginfo['method'].split('_')[1])
+        lambdas = trained_parameters
+        print nonzero_index
+        print lambdas[nonzero_index]/np.sum(lambdas)
+        pdb.set_trace()
+
     return test_loss
 
 def random_baseline(test_batch, method):
@@ -334,15 +342,23 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     pool = Pool(NUM_WORKERS)
 
     for rep in xrange(n_reps):
-        # randomly select the method
-        method = sample(['lie_algebra', 'qr', 'composition'], 1)[0]
-        print rep, ': generating U using:', method
+        # randomly select the method to generate test data
+        #method = sample(['lie_algebra', 'qr', 'composition', 'sparse'], 1)[0]
+        method = sample(['sparse'], 1)[0]
+        if method == 'sparse':
+            nonzero_index = sample(xrange(d*d), 1)[0]
+            method = 'sparse_'+str(nonzero_index)
+            sparse_lambdas = np.zeros(shape=(d*d))
+            sparse_lambdas[nonzero_index] = 1
+            U = unitary_matrix(d, method='lie_algebra', lambdas=sparse_lambdas)
+        else:
+            U = unitary_matrix(d, method=method)
+
+        print rep, ': generated U using:', method
 
         loginfo['method'] = method
         loginfo['rep'] = rep
 
-        # set up test data
-        U = unitary_matrix(d, method=method)
         batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs, noise=noise)
 
         # prepare trace dicts
