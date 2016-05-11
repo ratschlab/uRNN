@@ -164,38 +164,39 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
             lambdas = np.random.normal(size=n*n)
         L = lie_algebra_element(n, lambdas)
         U = expm(L)
-    elif method == 'qr':
-        if not lambdas is None:
-            print 'WARNING: Method qr selected, but lambdas provided (uselessly)!'
-        A = np.random.random(size=(n, n)) + 1j*np.random.random(size=(n, n))
-        U, r = np.linalg.qr(A)
-    elif method == 'composition':
-        # skipping reflection because tired TODO fix
-        # diag
-        thetas1 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
-        diag1 = np.diag(np.cos(thetas1) + 1j*np.sin(thetas1))
-        # fft
-        step2 = fft2(diag1)
-        # skipping reflection
-        step3 = step2
-        # permutation
-        permutation = np.random.permutation(np.eye(n))
-        step4 = np.dot(step3, permutation)
-        # diag
-        thetas2 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
-        diag2 = np.diag(np.cos(thetas2) + 1j*np.sin(thetas2))
-        step5 = np.dot(step4, diag2)
-        # ifft
-        step6 = ifft2(step5)
-        # skipping reflection
-        step7 = step6
-        # final diag
-        thetas3 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
-        diag3 = np.diag(np.cos(thetas3) + 1j*np.sin(thetas3))
-        U = np.dot(step7, diag3)
     else:
-        print method
-        raise NotImplementedError
+        if not lambdas is None:
+            print 'WARNING: Method', method, 'selected, but lambdas provided (uselessly)!'
+        if method == 'qr':
+            A = np.random.random(size=(n, n)) + 1j*np.random.random(size=(n, n))
+            U, r = np.linalg.qr(A)
+        elif method == 'composition':
+            # skipping reflection because tired TODO fix
+            # diag
+            thetas1 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
+            diag1 = np.diag(np.cos(thetas1) + 1j*np.sin(thetas1))
+            # fft
+            step2 = fft2(diag1)
+            # skipping reflection
+            step3 = step2
+            # permutation
+            permutation = np.random.permutation(np.eye(n))
+            step4 = np.dot(step3, permutation)
+            # diag
+            thetas2 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
+            diag2 = np.diag(np.cos(thetas2) + 1j*np.sin(thetas2))
+            step5 = np.dot(step4, diag2)
+            # ifft
+            step6 = ifft2(step5)
+            # skipping reflection
+            step7 = step6
+            # final diag
+            thetas3 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
+            diag3 = np.diag(np.cos(thetas3) + 1j*np.sin(thetas3))
+            U = np.dot(step7, diag3)
+        else:
+            print method
+            raise NotImplementedError
     if check_unitary:
         assert np.allclose(np.dot(U, np.conj(U.T)), np.eye(n))
     return U
