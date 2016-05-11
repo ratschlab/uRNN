@@ -275,12 +275,11 @@ def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=Tru
     else:
         test_loss = -1
 
-    if 'sparse' in loginfo['method'] and loginfo['exp'] == 'general_unitary':
+    if 'sparse' in loginfo['method'] and loginfo['exp_name'] == 'general_unitary':
         nonzero_index = int(loginfo['method'].split('_')[1])
         lambdas = trained_parameters
         print nonzero_index
-        print lambdas[nonzero_index]/np.sum(lambdas)
-        pdb.set_trace()
+        print lambdas[nonzero_index]/np.sum(np.abs(lambdas))
 
     return test_loss
 
@@ -315,7 +314,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     """
     # OPTIONS
     batch_size = 20
-    n_batches = 50000
+    n_batches = 5000
     if n_epochs is None:
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs

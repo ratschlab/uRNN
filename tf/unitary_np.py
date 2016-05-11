@@ -167,7 +167,13 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
     else:
         if not lambdas is None:
             print 'WARNING: Method', method, 'selected, but lambdas provided (uselessly)!'
-        if method == 'qr':
+        if 'sparse' in method:
+            nonzero_index = int(method.split('_')[1])
+            lambdas = np.zeros(shape=(n*n))
+            lambdas[nonzero_index] = 1
+            L = lie_algebra_element(n, lambdas)
+            U = expm(L)
+        elif method == 'qr':
             A = np.random.random(size=(n, n)) + 1j*np.random.random(size=(n, n))
             U, r = np.linalg.qr(A)
         elif method == 'composition':
