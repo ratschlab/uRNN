@@ -14,6 +14,8 @@ import pdb
 from scipy.linalg import expm, polar
 from scipy.fftpack import fft2, ifft2
 
+from functools import partial
+
 def lie_algebra_element(n, lambdas, check_skew_hermitian=False):
     # TODO: np-ify
     """
@@ -208,10 +210,20 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True):
     return U
 
 # === some grad hacks === #
-def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, EPSILON=1e-5):
+
+def numerical_partial_gradient(e, L=None, n=None, U=None, dcost_dU=None, EPSILON=None):
+    """ For giving to the pool.
     """
-    TODO: update name
-    TODO: make fast
+    dU_dlambda = (expm(L + EPSILON*lie_algebra_basis_element(n, e, complex_out=True)) - U)/EPSILON
+    # TODO: hmm, how do we ensure that delta lambda is REAL?
+    delta = np.abs(np.trace(np.dot(dcost_dU, dU_dlambda)))
+    return delta
+
+def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, 
+                          EPSILON=1e-5, learning_rate=0.01):
+    """
+    Given dcost/dU, get dcost/dlambdas
+    Using... numerical differentiation. :(
     """
     # first term (d cost / d U)
     assert dcost_dU_re.shape == dcost_dU_im.shape
@@ -223,15 +235,14 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, EPSILON=1e-5):
     # meanwhile update lambdas
     L = lie_algebra_element(n, lambdas)
     U = expm(L)
-    # POTENTIAL FOR PARALLELISATION HERE (should really)
-    # (not sure how well multiprocessing will play with tf)
-    for e in xrange(n*n):
-        dU_dlambda = (expm(L + EPSILON*lie_algebra_basis_element(n, e, complex_out=True)) - U)/EPSILON
-        # TODO: hmm, how do we ensure that delta lambda is REAL?
-        delta = np.abs(np.trace(np.dot(dcost_dU, dU_dlambda)))
-        lambdas[e] += delta
+
+    # parallel version
+    numerical_parallel = partial(numerical_partial_gradient, L=L, U=U, n=n, 
+                                 dcost_dU=dcost_dU, EPSILON=EPSILON)
+    dlambdas = np.array(map(numerical_parallel, xrange(n*n)))
+    lambdas += learning_rate*dlambdas
     
     # having updated the lambdas, get new U
     U_new = expm(lie_algebra_element(n, lambdas))
 
-    return np.real(U_new), np.imag(U_new), lambdas
+    return np.real(U_new), np.imag(U_new), lambdas, dlambdas
