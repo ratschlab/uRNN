@@ -268,13 +268,7 @@ def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=Tru
     else:
         test_loss = -1
 
-    if 'sparse' in loginfo['method'] and loginfo['exp_name'] == 'general_unitary':
-        nonzero_index = int(loginfo['method'].split('_')[1])
-        lambdas = trained_parameters
-        print nonzero_index
-        print lambdas[nonzero_index]/np.sum(np.abs(lambdas))
-
-    return test_loss
+    return test_loss, trained_parameters
 
 def random_baseline(test_batch, method):
     """
@@ -344,6 +338,8 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             sparse_lambdas = np.zeros(shape=(d*d))
             sparse_lambdas[nonzero_index] = 1
             U = unitary_matrix(d, method='lie_algebra', lambdas=sparse_lambdas)
+            sparse_test = open(experiment_settings + '_sparse.txt', 'a')
+            sparse_test.write('truth ' + map(lambda x: 'lambda_' + str(x), xrange(d*d)) + '\n')
         else:
             U = unitary_matrix(d, method=method)
 
@@ -373,7 +369,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             loss_fn = trivial_loss
             initial_parameters = np.random.normal(size=d) + 1j*np.random.normal(size=d)
             # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
             # record
             test_losses['trivial'] = test_loss
             # save now
@@ -385,7 +381,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
             # record
             test_losses['free_matrix'] = test_loss
             R_test.write('free_matrix ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -397,7 +393,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, project=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, project=True)
             # record
             test_losses['projection'] = test_loss
             R_test.write('projection ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -412,7 +408,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             # all of these parameters are real
             initial_parameters = np.random.normal(size=7*d)
             # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
             # record
             test_losses['complex_RNN_vanilla'] = test_loss
             R_test.write('complex_RNN_vanilla ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -427,7 +423,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             # all of these parameters are real
             initial_parameters = np.random.normal(size=7*d)
             # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
             # record
             test_losses['complex_RNN'] = test_loss
             R_test.write('complex_RNN ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -438,12 +434,20 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             loss_fn = general_unitary_loss
             initial_parameters = np.random.normal(size=d*d)
             # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
             # record
             test_losses['general_unitary'] = test_loss
             R_test.write('general_unitary ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
             R_test.flush()
- 
+            # for the sparsity demonstration
+            if 'sparse' in method:
+                nonzero_index = int(method.split('_')[1])
+                lambdas = trained_parameters
+                print nonzero_index
+                print lambdas[nonzero_index]/np.sum(np.abs(lambdas))
+                sparse_test.write(str(nonzero_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
+                sparse_test.flush()
+
         print test_losses
 
         # save test things...
