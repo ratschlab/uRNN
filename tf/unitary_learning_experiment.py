@@ -19,14 +19,13 @@ import sys
 
 from data import generate_unitary_learning, create_batches
 from unitary_np import unitary_matrix, project_to_unitary
-#from scipy.fftpack import fft2, ifft2
 from scipy.fftpack import fft, ifft
 from functools import partial
 from multiprocessing import Pool
 from random import sample
 
 # === some globals === #
-MEASURE_SKIP = 250
+MEASURE_SKIP = 100
 NUM_WORKERS = 32
 
 # === loss functions === #
@@ -207,16 +206,6 @@ def numerical_gradient(loss_function, parameters, batch, pool, EPSILON=10e-6):
     new_losses = np.array(pool.map(numerical_parallel, xrange(len(parameters))))
     parameters_gradient = (new_losses - original_loss)/EPSILON
 
-#    n_parameters = len(parameters)
-#    for i in xrange(n_parameters):
-#        parameters_epsilon = np.zeros(n_parameters)
-#        parameters_epsilon[i] = EPSILON
-#       
-#        new_loss = loss_function(parameters + parameters_epsilon, batch)
-#        
-#        difference = (new_loss - original_loss)/EPSILON
-##        parameters_gradient[i] = difference
-    
     return original_loss, parameters_gradient
 
 def train_loop(batches, loss_function, initial_parameters, pool, loginfo, LEARNING_RATE=0.001, vali_data=None, PROJECT_TO_UNITARY=False):
@@ -237,14 +226,18 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo, LEARNI
 
     for (i, batch) in enumerate(batches):
         loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch, pool)
+        batch_size = batch[0].shape[0]
         if i % MEASURE_SKIP == 0:
             # only record some of the points, for memory efficiency
-            loginfo['train_file'].write(loginfo['exp_name']+' '+str(i*MEASURE_SKIP)+' '+str(loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+            loginfo['train_file'].write(loginfo['exp_name']+' '+str((i + 1)*batch_size)+' '+str(loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
             if not vali_data is None:
                 vali_loss = loss_function(parameters, vali_data)
                 if i % (MEASURE_SKIP*4) == 0:
-                    print i, '\t\tVALI:', vali_loss
-                loginfo['vali_file'].write(loginfo['exp_name']+' '+str(i*MEASURE_SKIP)+' '+str(vali_loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+                    print (i + 1)*batch_size, '\t\tVALI:', vali_loss
+                loginfo['vali_file'].write(loginfo['exp_name']+' '+str((i + 1)*batch_size)+' '+str(vali_loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+                # flush both files now and again
+                loginfo['vali_file'].flush()
+                loginfo['train_file'].flush()
         # *now* update parameters
         parameters = parameters - LEARNING_RATE*parameters_gradient
         if PROJECT_TO_UNITARY:
@@ -308,7 +301,7 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01):
+def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
     """
     For testing, right now.
     """
@@ -325,17 +318,18 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     R_vali = open(experiment_settings+'_vali.txt', 'a')
     R_train = open(experiment_settings+'_train.txt', 'a')
     R_test = open(experiment_settings+'_test.txt', 'a')
-    # headers
-    header = 'experiment training_examples loss rep method'
-    R_vali.write(header+'\n')
-    R_train.write(header+'\n')
-    R_test.write('experiment loss rep method\n')
-    # flush
-    R_vali.flush()
-    R_train.flush()
-    R_test.flush()
+    if start_from_rep == 0:
+        # headers
+        header = 'experiment training_examples loss rep method'
+        R_vali.write(header+'\n')
+        R_train.write(header+'\n')
+        R_test.write('experiment loss rep method\n')
+        # flush
+        R_vali.flush()
+        R_train.flush()
+        R_test.flush()
     # put together
-    loginfo = {'vali_file': R_vali, 'train_file': R_train, 'test_file': R_test, 'exp_name': None, 'rep': None, 'method': None}
+    loginfo = {'vali_file': R_vali, 'train_file': R_train, 'exp_name': None, 'rep': None, 'method': None}
 
     # some parallelism
     pool = Pool(NUM_WORKERS)
