@@ -20,7 +20,10 @@ from time import time
 # local imports
 from models import RNN
 from data import ExperimentData
-from unitary_np import numgrad_lambda_update
+# YOLO
+from unitary_np import lie_algebra_element, lie_algebra_basis_element, numgrad_lambda_update
+# DEYOLO
+#from unitary_np import numgrad_lambda_update
 
 # === constants === #
 N_TRAIN = int(1e5)
@@ -28,10 +31,6 @@ N_TEST = int(1e4)
 N_VALI = int(1e4)
 
 DO_TEST = False
-
-# EVERYTHING IS FIRE
-
-# need a way of controlling all the experimental options
 
 def get_cost(outputs, y, loss_type='MSE'):
     """
@@ -186,6 +185,10 @@ def main(experiment='adding', batch_size=10, state_size=20,
         train_op = update_variables(opt, g_and_v_nonU)
         assign_re_op = assign_variable(U_re_variable, U_new_re)
         assign_im_op = assign_variable(U_im_variable, U_new_im)
+                    
+        # save-specific thing: saving lambdas
+        lambda_file = open('output/' + identifier + '_lambdas.txt', 'w')
+        lambda_file.write('batch ' + ' '.join(lambda x: 'lambda_' + str(x), xrange(len(lambdas))) + '\n')
     else:
         # nothing special here, movin' along...
         train_op = update_step(cost, learning_rate, gradient_clipping)
@@ -209,18 +212,49 @@ def main(experiment='adding', batch_size=10, state_size=20,
                 if model == 'uRNN':
                     # CONTINUE GRADIENT HACKS
                     # TODO: OPTIMISATION, TESTING
+                    # YOLO making sure U is being updated
+                    U_re_orig, U_im_orig = session.run(U_variables)
+                    pdb.set_trace()
+                    # DEYOLO
                     dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
-                    U_new_re_array, U_new_im_array, lambdas = numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas)
+                    U_new_re_array, U_new_im_array, lambdas, dlambdas = numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas)
+                    # YOLO checking numerical gradients (EXPENSIVE)
+                    basic_cost =session.run(cost, {x: batch_x, y:batch_y})
+                    L = unitary_np.lie_algebra_element(d, lambdas)
+                    numerical_dcost_dlambdas = np.zeros_like(lambdas)
+                    for e in xrange(len(lambdas)):
+                        perturbed_L = L + EPSILON*unitary_np.lie_algebra_basis_element(d, e, complex_out=True)
+                        perturbed_U = exp(perturbed_L)
+                        perturbed_U_re = tf.constant(np.real(perturbed_U))
+                        perturbed_U_im = tf.constant(np.imag(perturbed_U))
+                        pertubed_cost = session.run(cost, {x: batch_x, y: batch_y, U_re_variable: perturbed_U_re, U_im_variable: perturbed_U_im})
+                        gradient = (perturbed_cost - basic_cost)/EPSILON
+                        numerical_dcost_dlambdas[e] = gradient
+                    # now compare with dlambdas
+                    np.mean(dlambdas - numerical_dcost_dlambdas)
+                    pdb.set_trace()
+                    # DEYOLO
+                    # YOLO making sure gradients aren't all None or anything
+                    nonU_grads = tf.gradients(cost, nonU_variables)
+                    U_grads = tf.gradients(cost, U_variables)
+                    pdb.set_trace()
+                    # DEYOLO
                     train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
+                    # YOLO making sure U is being updated part 2
+                    U_re, U_im = session.run(U_variables)
+                    pdb.set_trace()
+                    # DEYOLO
                 else:
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
                 print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
+
                 if batch_index % 50 == 0:
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
                     vali_cost_trace.append(vali_cost)
+              
+                    # save best parameters
                     if vali_cost < best_vali_cost:
-                        # save best parameters
                         best_vali_cost = vali_cost
                         save_path = saver.save(session, best_model_path)
                         print epoch, '\t', batch_index, '\t*** VALI', loss_type + ':', vali_cost, '\t('+save_path+')'
@@ -237,6 +271,10 @@ def main(experiment='adding', batch_size=10, state_size=20,
 
                     cPickle.dump(save_vals, file(trace_path, 'wb'),
                                  cPickle.HIGHEST_PROTOCOL)
+
+                    # uRNN specific stuff: save lambdas
+                    if model == 'uRNN':
+                        lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
 
             # shuffle the data at each epoch
             train_data.shuffle()
