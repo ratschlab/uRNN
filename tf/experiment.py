@@ -151,6 +151,10 @@ def main(experiment='adding', batch_size=10, state_size=20,
         loss_type = 'CE'
         assert input_size == 10
 
+    # === files in which to record === #
+    hidden_gradients_file = open('output/' + identifier + '.hidden_grads.txt', 'w')
+    hidden_gradients_file.write('batch t\n')
+    
     # === construct the graph === #
     # (doesn't actually matter which one we make placeholders out of)
     x, y = train_data.make_placeholders()
@@ -275,6 +279,14 @@ def main(experiment='adding', batch_size=10, state_size=20,
                     # uRNN specific stuff: save lambdas
                     if model == 'uRNN':
                         lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
+
+                # occasionally, calculate all the gradients
+                if batch_index % 100 == 0:
+                    #hidden_states = tf.variables(...) # ... figure out which these are, do I need to name them while defining in RNNCell?
+                    #gradz = tf.gradients(cost, hidden_states)
+                    #grad_vals = session.run(gradz)
+                    #grad_mags = ... get their magnitudes, also values
+                    #hidden_gradients_file.write(str(batch_index) + ' ' + str('\n' + str(batch_index) + ' ').join(map(str, grad_mags)) + '\n') # haha what is wrong with me
 
             # shuffle the data at each epoch
             train_data.shuffle()
