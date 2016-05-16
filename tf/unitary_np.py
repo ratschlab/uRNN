@@ -268,8 +268,7 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True,
     elif method == 'composition':
         U = random_unitary_composition(n)
     else:
-        print method
-            raise NotImplementedError
+        raise ValueError(method)
     
     if check_unitary:
         assert np.allclose(np.dot(U, np.conj(U.T)), np.eye(n))
