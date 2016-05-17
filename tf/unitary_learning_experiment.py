@@ -19,10 +19,11 @@ import sys
 
 from data import generate_unitary_learning, create_batches
 from unitary_np import unitary_matrix, project_to_unitary
-from scipy.fftpack import fft, ifft
 from functools import partial
 from multiprocessing import Pool
 from random import sample
+
+from options import presets
 
 # === some globals === #
 MEASURE_SKIP = 100
@@ -141,7 +142,7 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
         batch_size = batch[0].shape[0]
         # only record some of the points, for memory efficiency
         if i % MEASURE_SKIP == 0:
-            vali_loss = loss_function(parameters, vali_data)
+            vali_loss = loss_function(parameters, vali_batch)
             if i % (MEASURE_SKIP*4) == 0:
                 print (i + 1)*batch_size, '\t\tVALI:', vali_loss
 
@@ -153,7 +154,7 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
             loginfo['train_file'].flush()
 
         # === update parameters
-        parameters = parameters - LEARNING_RATE*d_params
+        parameters = parameters - experiment.learning_rate*d_params
         if experiment.project:
             # use the polar decomposition to re-unitarise the matrix
             parameters = project_to_unitary(parameters, check_unitary=False)
@@ -204,7 +205,7 @@ def logging(d, noise, batch_size, n_batches, start_from_rep):
     return R_vali, R_train, R_test
 
 # === main loop === #
-def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
+def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
     """
     Args:
         d
@@ -214,6 +215,10 @@ def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
         noise
         start_from_rep          int         initialise rep counter to this
     """
+    if experiments == 'presets':
+        print 'WARNING: no experiments provided, using presets:'
+        experiments = presets(d)
+        for exp in experiments: print exp.name
     # OPTIONS
     batch_size = 20
     n_batches = 50000
@@ -260,7 +265,7 @@ def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
         random_test_loss = random_baseline(test_batch, method=method)
         true_test_loss = true_baseline(U, test_batch)
         baselines = {'random_unitary': random_test_loss, 'true': true_test_loss}
-        for (name, loss) in baselines:
+        for (name, loss) in baselines.iteritems():
             R_test.write(name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
         R_test.flush()
 
@@ -268,7 +273,9 @@ def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
         for experiment in experiments:
             exp_name = experiment.name
             print 'Running', exp_name, 'experiment!'
-            trained_parameters = train_loop(experiment, train, vali, pool, loginfo)
+            trained_parameters = train_loop(experiment, 
+                                            train_batches, vali_batch, 
+                                            pool, loginfo)
             test_loss = experiment.loss_function(trained_parameters, test_batch)
 
             # record this experimental result
@@ -290,12 +297,3 @@ def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
     R_test.close()
 
     return True
-
-## actually run !!! ###
-if len(sys.argv) == 3:
-    print 'Getting system arguments!'
-    d=int(sys.argv[1])
-    noise=float(sys.argv[2])
-    print 'Dimension:', d
-    print 'Noise:', noise
-    main(d=d, noise=noise)
