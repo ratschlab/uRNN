@@ -173,7 +173,7 @@ class Experiment(object):
                  random_projections=0,
                  restrict_parameters=False,
                  theano_reflection=False,
-                 change_of_basis=False):
+                 change_of_basis=0):
         # required
         self.name = name
         self.d = d
@@ -246,7 +246,7 @@ class Experiment(object):
             fn = partial(complex_RNN_loss, permutation=permutation, 
                          theano_reflection=self.theano_reflection)
         elif 'general_unitary' in self.name:
-            if self.change_of_basis and self.basis_change is None:
+            if self.change_of_basis > 0 and self.basis_change is None:
                 self.set_basis_change()
             fn = partial(general_unitary_loss, basis_change=self.basis_change)
         else:
@@ -264,10 +264,11 @@ class Experiment(object):
             self.learnable_parameters = np.arange(d*d)
         return True
 
-    def set_basis_change(self, scale=10):
-        if self.change_of_basis:
+    def set_basis_change(self):
+        if self.change_of_basis > 0:
             d = self.d
-            basis_change = np.random.uniform(low=-scale, high=scale, size=(d,d))
+            scale = self.change_of_basis
+            basis_change = np.random.uniform(low=-scale, high=scale, size=(d*d,d*d))
             self.basis_change = basis_change
         else:
             self.basis_change = None
@@ -296,7 +297,7 @@ def test_random_projections(d):
 def basis_change(d):
     """ testing how the change of basis influences learning """
     general_default = Experiment('general_unitary', d)
-    general_basis_1 = Experiment('general_unitary_basis2', d, change_of_basis=True)
-    general_basis_2 = Experiment('general_unitary_basis3', d, change_of_basis=True)
+    general_basis_1 = Experiment('general_unitary_basis10', d, change_of_basis=10)
+    general_basis_2 = Experiment('general_unitary_basis50', d, change_of_basis=50)
     exp_list = [general_default, general_basis_1, general_basis_2]
     return exp_list
