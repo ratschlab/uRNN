@@ -180,27 +180,50 @@ def general_unitary_loss(parameters, batch):
     return loss
 
 # === utility functions === #
-def numerical_partial_gradient(i, loss_function=None, parameters=None, batch=None, EPSILON=10e-6):
+def numerical_partial_gradient(i, n, loss_function, old_loss, parameters, 
+                               batch, EPSILON=10e-6):
     """
-    For giving to the pool.
+    Gradient in a single coordinate direction.
+    (returns a float)
     """
-    n_parameters = len(parameters)
-    parameters_epsilon = np.zeros(n_parameters)
+    parameters_epsilon = np.zeros(n)
     parameters_epsilon[i] = EPSILON
     new_loss = loss_function(parameters + parameters_epsilon, batch)
-    return new_loss
-    
-def numerical_gradient(loss_function, parameters, batch, pool, EPSILON=10e-6, 
-                       update_indices=None):
+    gradient = (new_loss - old_loss)/EPSILON
+    return gradient
+
+def numerical_random_gradient(i, learnable_parameters, n, loss_function, 
+                              old_loss, parameters, batch, EPSILON=10e-6):
     """
-    Calculate the numerical gradient of a given loss function with respect to a np.array of parameters.
+    Gradient in a random direction.
+    (returns a vector)
+    """
+    # get a random direction in the learnable subspace
+    random_direction = np.random.normal(size=len(learnable_parameters))
+    random_direction /= np.linalg.norm(random_direction)
+    # perturb the parameters
+    parameters_epsilon = np.zeros(n)
+    parameters_epsilon[learnable_parameters] = random_direction
+    # calculate finite difference
+    new_loss = loss_function(parameters + EPSILON*random_direction, batch)
+    difference = (new_loss - old_loss)/EPSILON
+    # each component gets a gradient in proportion to the random direction
+    gradient_vector = np.zeros(n)
+    gradient_vector[learnable_parameters] = difference*random_direction
+    return gradient_vector
+
+def numerical_gradient(loss_function, parameters, batch, pool, 
+                       random_projection=False, update_indices=None):
+    """
+    Calculate the numerical gradient of a given loss function with respect to 
+    a np.array of parameters.
 
     Args:
         loss_function
         parameters
         batch
         pool
-        EPSILON
+        random_projection   bool indicating if we use random projection method
         update_indices      an array/iterable of which indices to calculate 
                                 gradients for
     """
@@ -208,16 +231,33 @@ def numerical_gradient(loss_function, parameters, batch, pool, EPSILON=10e-6,
 
     assert len(parameters.shape) == 1
     parameters_gradient = np.zeros_like(parameters)
+    n = len(parameters)
 
     if update_indices is None:
         update_indices = xrange(len(parameters))
 
-    numerical_parallel = partial(numerical_partial_gradient, 
-                                 loss_function=loss_function,
-                                 parameters=parameters,
-                                 batch=batch)
-    new_losses = np.array(pool.map(numerical_parallel, update_indices))
-    parameters_gradient[update_indices] = (new_losses - original_loss)/EPSILON
+    if random_projection:
+        # how many random projections to use? hmm...
+        N_RANDOM = 5
+        numerical_parallel = partial(numerical_random_gradient, 
+                                     learnable_parameters=update_indices,
+                                     n=n,
+                                     loss_function=loss_function,
+                                     old_loss=original_loss,
+                                     parameters=parameters,
+                                     batch=batch)
+        gradients_list = pool.map(numerical_parallel, xrange(N_RANDOM))
+        # seemingly numpy will convert this to an array or something
+        parameters_gradient = np.sum(gradients_list, axis=0)
+    else:
+        numerical_parallel = partial(numerical_partial_gradient, 
+                                     n=n,
+                                     loss_function=loss_function,
+                                     old_loss=original_loss,
+                                     parameters=parameters,
+                                     batch=batch)
+        gradients = np.array(pool.map(numerical_parallel, update_indices))
+        parameters_gradient[update_indices] = gradients
 
     return original_loss, parameters_gradient
 
@@ -240,8 +280,13 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo,
     parameters = initial_parameters
 
     for (i, batch) in enumerate(batches):
-        loss, parameters_gradient = numerical_gradient(loss_function, parameters, 
-                                                       batch, pool, update_indices=learnable_parameters)
+        loss, parameters_gradient = numerical_gradient(loss_function, 
+                                                       parameters, 
+                                                       batch, pool, 
+                                                       random_projection=False,
+                                                       update_indices=learnable_parameters)
+
+
         batch_size = batch[0].shape[0]
         if i % MEASURE_SKIP == 0:
             # only record some of the points, for memory efficiency
