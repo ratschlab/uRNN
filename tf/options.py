@@ -151,7 +151,7 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=True):
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
     return loss
 
-def general_unitary_loss(parameters, batch):
+def general_unitary_loss(parameters, batch, basis_change=None):
     """
     Hey, it's my one! Rendered very simple by existence of helper functions. :)
     """
@@ -159,7 +159,7 @@ def general_unitary_loss(parameters, batch):
     d = x.shape[1]
 
     lambdas = parameters
-    U = unitary_matrix(d, lambdas=lambdas)
+    U = unitary_matrix(d, lambdas=lambdas, basis_change=basis_change)
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
@@ -193,9 +193,9 @@ class Experiment(object):
         self.test_loss = -9999
         self.learning_rate = 0.001
         # derived
+        self.set_basis_change()     # this must happen before set_loss...
         self.set_loss()
         self.set_learnable_parameters()
-        self.set_basis_change()
         # TODO (sparse)
         self.nonzero_index = None
 
@@ -253,7 +253,9 @@ class Experiment(object):
             fn = partial(complex_RNN_loss, permutation=permutation, 
                          theano_reflection=self.theano_reflection)
         elif self.name in {'general_unitary', 'general_unitary_restricted'}:
-            fn = general_unitary_loss
+            if self.change_of_basis and self.basis_change is None:
+                self.set_basis_change()
+            fn = partial(general_unitary_loss, basis_change=self.basis_change)
         else:
             raise ValueError(self.name)
 
