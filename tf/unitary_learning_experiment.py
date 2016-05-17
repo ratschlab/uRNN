@@ -320,7 +320,9 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0, restrict_parameters=False):
+def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'general_unitary_restricted'], 
+         method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
+         
     """
     For testing, right now. (isn't it always the way)
 
@@ -332,8 +334,6 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
         n_epochs
         noise
         start_from_rep          int         initialise rep counter to this
-        restrict_parameters     boolean     if True, restrict general_unitary
-                                            to have <=7d learnable lambdas
     """
     # OPTIONS
     batch_size = 20
@@ -464,20 +464,30 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             R_test.flush()
         if 'general_unitary' in experiments:
             print 'Running "general_unitary" experiment!'
+            loginfo['exp_name'] = 'general_unitary'
             loss_fn = general_unitary_loss
             initial_parameters = np.random.normal(size=d*d)
-            if restrict_parameters and d >= 7:
+            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            # record
+            test_losses['general_unitary'] = test_loss
+            R_test.write('general_unitary ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.flush()
+        if 'general_unitary_restricted' in experiments:
+            if d <= 7:
+                print 'Uhh, d is less than or equal to 7. No point in restricting. Skipping experiment!'
+            else:
+                print 'Running "general_unitary_restricted" experiment!'
                 loginfo['exp_name'] = 'general_unitary_restricted'
+                loss_fn = general_unitary_loss
+                initial_parameters = np.random.normal(size=d*d)
                 learnable_parameters = np.random.choice(d*d, 7*d, replace=False)
                 print 'Restricting to', 7*d, 'learnable parameters (from', str(d*d)+')'
-            else:
-                loginfo['exp_name'] = 'general_unitary'
-            # actually run
-            test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, learnable_parameters=learnable_parameters)
-            # record
-            test_losses[loginfo['exp_name']] = test_loss
-            R_test.write(loginfo['exp_name'] + ' ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
-            R_test.flush()
+                # actually run
+                test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, learnable_parameters=learnable_parameters)
+                # record
+                test_losses['general_unitary_restricted'] = test_loss
+                R_test.write('general_unitary_restricted ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+                R_test.flush()
  
         print test_losses
 
