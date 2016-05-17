@@ -13,10 +13,6 @@ from unitary_np import unitary_matrix
 from scipy.fftpack import fft, ifft
 from functools import partial
 
-valid_experiments = {'trivial', 'free_matrix', 'projection', 'complex_RNN',
-                     'complex_RNN_vanilla', 'general_unitary', 
-                     'general_unitary_restricted'}
-
 # === loss functions === #
 def trivial_loss(parameters, batch):
     """
@@ -203,9 +199,6 @@ class Experiment(object):
         """
         Make sure attributes are sensible.
         """
-        if not self.name in valid_experiments:
-            raise ValueError(self.name)
-
         if self.d <= 7 and self.restrict_parameters:
             print 'WARNING: d is <= 7, but restrict parameters is true. It will have no effect.'
         if self.restrict_parameters and 'general_unitary' in self.name:
@@ -226,9 +219,9 @@ class Experiment(object):
             ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
         elif self.name in {'free_matrix', 'projection'}:
             ip = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
-        elif self.name in {'complex_RNN_vanilla', 'complex_RNN'}:
+        elif 'complex_RNN' in self.name:
             ip = np.random.normal(size=7*d)
-        elif self.name in {'general_unitary', 'general_unitary_restricted'}:
+        elif 'general_unitary' in self.name:
             ip = np.random.normal(size=d*d)
         else:
             raise ValueError(self.name)
@@ -248,11 +241,11 @@ class Experiment(object):
             fn = trivial_loss
         elif self.name in {'free_matrix', 'projection'}:
             fn = free_matrix_loss
-        elif self.name in {'complex_RNN_vanilla', 'complex_RNN'}:
+        elif 'complex_RNN' in self.name:
             permutation = np.random.permutation(np.eye(self.d))
             fn = partial(complex_RNN_loss, permutation=permutation, 
                          theano_reflection=self.theano_reflection)
-        elif self.name in {'general_unitary', 'general_unitary_restricted'}:
+        elif 'general_unitary' in self.name:
             if self.change_of_basis and self.basis_change is None:
                 self.set_basis_change()
             fn = partial(general_unitary_loss, basis_change=self.basis_change)
@@ -290,12 +283,20 @@ def presets(d):
     general = Experiment('general_unitary', d)
     exp_list = [proj, complex_RNN, general]
     if d > 7:
-        general_restrict = Experiment('general_unitary', d, restrict_parameters=True)
+        general_restrict = Experiment('general_unitary_restricted', d, restrict_parameters=True)
         exp_list.append(general_restrict)
     return exp_list
 
 def test_random_projections(d):
     exp_list = []
     for j in np.linspace(1, np.sqrt(d), num=5, dtype=int):
-        exp_list.append(Experiment('general_unitary', d, random_projections=j))
+        exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
+    return exp_list
+
+def basis_change(d):
+    """ testing how the change of basis influences learning """
+    general_default = Experiment('general_unitary', d)
+    general_basis_1 = Experiment('general_unitary_basis2', d, change_of_basis=True)
+    general_basis_2 = Experiment('general_unitary_basis3', d, change_of_basis=True)
+    exp_list = [general_default, general_basis_1, general_basis_2]
     return exp_list
