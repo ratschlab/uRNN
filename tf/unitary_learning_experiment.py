@@ -227,7 +227,10 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
     if experiments == 'presets':
         print 'WARNING: no experiments provided, using presets:'
         experiments = presets(d)
-        for exp in experiments: print exp.name
+    print 'Running experiments:'
+    for exp in experiments: 
+        print exp.name
+        assert exp.d == d
     # OPTIONS
     batch_size = 20
     n_batches = 50000
@@ -284,7 +287,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
             exp_name = experiment.name
             print 'Running', exp_name, 'experiment!'
             # 'reset' things
-            if exp_name == 'complex_RNN':
+            if 'complex_RNN' in exp_name:
                 experiment.set_loss()
             loginfo['t0'] = time.time()
             # train!
