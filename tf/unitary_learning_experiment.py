@@ -363,7 +363,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
     # some parallelism
     pool = Pool(NUM_WORKERS)
 
-    for rep in xrange(n_reps):
+    for rep in xrange(start_from_rep, start_from_rep + n_reps):
         # randomly select the method to generate test data
         method = sample(['lie_algebra', 'qr', 'composition'], 1)[0]
 #        method = sample(['sparse'], 1)[0]
