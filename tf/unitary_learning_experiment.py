@@ -321,8 +321,7 @@ def true_baseline(U, test_batch):
 
 # === main loop === #
 def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'general_unitary_restricted'], 
-         method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0)
-         
+        method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
     """
     For testing, right now. (isn't it always the way)
 
