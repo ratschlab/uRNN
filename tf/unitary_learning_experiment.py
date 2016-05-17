@@ -190,25 +190,40 @@ def numerical_partial_gradient(i, loss_function=None, parameters=None, batch=Non
     new_loss = loss_function(parameters + parameters_epsilon, batch)
     return new_loss
     
-def numerical_gradient(loss_function, parameters, batch, pool, EPSILON=10e-6):
+def numerical_gradient(loss_function, parameters, batch, pool, EPSILON=10e-6, 
+                       update_indices=None):
     """
     Calculate the numerical gradient of a given loss function with respect to a np.array of parameters.
+
+    Args:
+        loss_function
+        parameters
+        batch
+        pool
+        EPSILON
+        update_indices      an array/iterable of which indices to calculate 
+                                gradients for
     """
     original_loss = loss_function(parameters, batch)
 
     assert len(parameters.shape) == 1
     parameters_gradient = np.zeros_like(parameters)
 
+    if update_indices is None:
+        update_indices = xrange(len(parameters))
+
     numerical_parallel = partial(numerical_partial_gradient, 
                                  loss_function=loss_function,
                                  parameters=parameters,
                                  batch=batch)
-    new_losses = np.array(pool.map(numerical_parallel, xrange(len(parameters))))
-    parameters_gradient = (new_losses - original_loss)/EPSILON
+    new_losses = np.array(pool.map(numerical_parallel, update_indices))
+    parameters_gradient[update_indices] = (new_losses - original_loss)/EPSILON
 
     return original_loss, parameters_gradient
 
-def train_loop(batches, loss_function, initial_parameters, pool, loginfo, LEARNING_RATE=0.001, vali_data=None, PROJECT_TO_UNITARY=False):
+def train_loop(batches, loss_function, initial_parameters, pool, loginfo, 
+               LEARNING_RATE=0.001, vali_data=None, PROJECT_TO_UNITARY=False,
+               learnable_parameters=None):
     """
     Arguments:
         batches:            list of training batches
@@ -225,7 +240,8 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo, LEARNI
     parameters = initial_parameters
 
     for (i, batch) in enumerate(batches):
-        loss, parameters_gradient = numerical_gradient(loss_function, parameters, batch, pool)
+        loss, parameters_gradient = numerical_gradient(loss_function, parameters, 
+                                                       batch, pool, update_indices=learnable_parameters)
         batch_size = batch[0].shape[0]
         if i % MEASURE_SKIP == 0:
             # only record some of the points, for memory efficiency
@@ -246,7 +262,8 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo, LEARNI
     print 'Training complete!'
     return parameters
 
-def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, project=False):
+def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, 
+                   TEST=True, project=False, learnable_parameters=None):
     """
     Such laziness.
     """
@@ -254,13 +271,15 @@ def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=Tru
     test_batch = batches[1]
     train_batches = batches[2:]
 
+    # this is getting silly
     trained_parameters = train_loop(train_batches, 
                                     loss_fn, 
                                     initial_parameters, 
                                     pool,
                                     loginfo,
                                     vali_data=vali_batch,
-                                    PROJECT_TO_UNITARY=project)
+                                    PROJECT_TO_UNITARY=project,
+                                    learnable_parameters=learnable_parameters)
     
     if TEST:
         test_loss = loss_fn(trained_parameters, test_batch)
@@ -295,13 +314,23 @@ def true_baseline(U, test_batch):
     return loss
 
 # === main loop === #
-def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
+def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'general_unitary_restricted'], 
+        method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
     """
-    For testing, right now.
+    For testing, right now. (isn't it always the way)
+
+    Args:
+        d
+        experiments
+        method
+        n_reps
+        n_epochs
+        noise
+        start_from_rep          int         initialise rep counter to this
     """
     # OPTIONS
     batch_size = 20
-    n_batches = 5000
+    n_batches = 50000
     if n_epochs is None:
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs
@@ -328,10 +357,10 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
     # some parallelism
     pool = Pool(NUM_WORKERS)
 
-    for rep in xrange(n_reps):
+    for rep in xrange(start_from_rep, start_from_rep + n_reps):
         # randomly select the method to generate test data
-        #method = sample(['lie_algebra', 'qr', 'composition', 'sparse'], 1)[0]
-        method = sample(['sparse'], 1)[0]
+        method = sample(['lie_algebra', 'qr', 'composition'], 1)[0]
+#        method = sample(['sparse'], 1)[0]
         if method == 'sparse':
             nonzero_index = sample(xrange(d*d), 1)[0]
             method = 'sparse_'+str(nonzero_index)
@@ -439,8 +468,9 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
             test_losses['general_unitary'] = test_loss
             R_test.write('general_unitary ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
             R_test.flush()
-            # for the sparsity demonstration
+            # for the sparsity demonstration (TODO FIX)
             if 'sparse' in method:
+                raise NotImplementedError
                 nonzero_index = int(method.split('_')[1])
                 lambdas = trained_parameters
                 print nonzero_index
@@ -448,6 +478,23 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary'], meth
                 sparse_test.write(str(nonzero_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
                 sparse_test.flush()
 
+        if 'general_unitary_restricted' in experiments:
+            if d <= 7:
+                print 'Uhh, d is less than or equal to 7. No point in restricting. Skipping experiment!'
+            else:
+                print 'Running "general_unitary_restricted" experiment!'
+                loginfo['exp_name'] = 'general_unitary_restricted'
+                loss_fn = general_unitary_loss
+                initial_parameters = np.random.normal(size=d*d)
+                learnable_parameters = np.random.choice(d*d, 7*d, replace=False)
+                print 'Restricting to', 7*d, 'learnable parameters (from', str(d*d)+')'
+                # actually run
+                test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, learnable_parameters=learnable_parameters)
+                # record
+                test_losses['general_unitary_restricted'] = test_loss
+                R_test.write('general_unitary_restricted ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
+                R_test.flush()
+ 
         print test_losses
 
         # save test things...
