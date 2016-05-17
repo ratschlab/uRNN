@@ -6,7 +6,7 @@ PLOT_TRAIN<-FALSE
 d<-args[1]
 noise<-args[2]
 
-fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('output/simple/fft1_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
 
 # --- vali --- #
@@ -15,7 +15,7 @@ data<-read.table(fname, header=T)
 data['rep']<-NULL
 data['method']<-NULL
 
-ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom")
+ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom") + ylim(0, 10)
 ggsave(gsub(".txt", ".png", fname))
 
 # --- train --- # (copy pasta)
