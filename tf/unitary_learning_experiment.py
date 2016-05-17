@@ -263,6 +263,7 @@ def numerical_gradient(loss_function, parameters, batch, pool,
 
 def train_loop(batches, loss_function, initial_parameters, pool, loginfo, 
                LEARNING_RATE=0.001, vali_data=None, PROJECT_TO_UNITARY=False,
+               random_projection=False,
                learnable_parameters=None):
     """
     Arguments:
@@ -283,7 +284,7 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo,
         loss, parameters_gradient = numerical_gradient(loss_function, 
                                                        parameters, 
                                                        batch, pool, 
-                                                       random_projection=False,
+                                                       random_projection=random_projection,
                                                        update_indices=learnable_parameters)
 
 
@@ -308,7 +309,8 @@ def train_loop(batches, loss_function, initial_parameters, pool, loginfo,
     return parameters
 
 def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, 
-                   TEST=True, project=False, learnable_parameters=None):
+                   TEST=True, project=False, random_projection=False,
+                   learnable_parameters=None):
     """
     Such laziness.
     """
@@ -324,6 +326,7 @@ def run_experiment(loss_fn, batches, initial_parameters, pool, loginfo,
                                     loginfo,
                                     vali_data=vali_batch,
                                     PROJECT_TO_UNITARY=project,
+                                    random_projection=random_projection,
                                     learnable_parameters=learnable_parameters)
     
     if TEST:
@@ -360,7 +363,8 @@ def true_baseline(U, test_batch):
 
 # === main loop === #
 def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'general_unitary_restricted'], 
-        method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
+        method=None, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0,
+        random_projection=False):
     """
     For testing, right now. (isn't it always the way)
 
@@ -443,7 +447,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
             loss_fn = trivial_loss
             initial_parameters = np.random.normal(size=d) + 1j*np.random.normal(size=d)
             # actually run
-            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, random_projection=random_projection)
             # record
             test_losses['trivial'] = test_loss
             # save now
@@ -455,7 +459,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
-            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, random_projection=random_projection)
             # record
             test_losses['free_matrix'] = test_loss
             R_test.write('free_matrix ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -467,7 +471,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
             loss_fn = free_matrix_loss
             initial_parameters = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
             # actually run
-            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, project=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, project=True, random_projection=random_projection)
             # record
             test_losses['projection'] = test_loss
             R_test.write('projection ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -482,7 +486,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
             # all of these parameters are real
             initial_parameters = np.random.normal(size=7*d)
             # actually run
-            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, random_projection=random_projection)
             # record
             test_losses['complex_RNN_vanilla'] = test_loss
             R_test.write('complex_RNN_vanilla ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -497,7 +501,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
             # all of these parameters are real
             initial_parameters = np.random.normal(size=7*d)
             # actually run
-            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, random_projection=random_projection)
             # record
             test_losses['complex_RNN'] = test_loss
             R_test.write('complex_RNN ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -508,7 +512,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
             loss_fn = general_unitary_loss
             initial_parameters = np.random.normal(size=d*d)
             # actually run
-            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True)
+            test_loss, trained_parameters = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, random_projection=random_projection)
             # record
             test_losses['general_unitary'] = test_loss
             R_test.write('general_unitary ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
@@ -534,7 +538,7 @@ def main(d=5, experiments=['projection', 'complex_RNN', 'general_unitary', 'gene
                 learnable_parameters = np.random.choice(d*d, 7*d, replace=False)
                 print 'Restricting to', 7*d, 'learnable parameters (from', str(d*d)+')'
                 # actually run
-                test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, learnable_parameters=learnable_parameters)
+                test_loss = run_experiment(loss_fn, batches, initial_parameters, pool, loginfo, TEST=True, random_projection=random_projection, learnable_parameters=learnable_parameters)
                 # record
                 test_losses['general_unitary_restricted'] = test_loss
                 R_test.write('general_unitary_restricted ' + str(test_loss) + ' ' + str(rep) + ' ' + method +'\n')
