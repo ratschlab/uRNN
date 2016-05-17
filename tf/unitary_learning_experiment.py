@@ -16,6 +16,7 @@ import numpy as np
 import pdb
 import cPickle
 import sys
+import time
 
 from data import generate_unitary_learning, create_batches
 from unitary_np import unitary_matrix, project_to_unitary
@@ -141,12 +142,13 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
         batch_size = batch[0].shape[0]
         # only record some of the points, for memory efficiency
         if i % MEASURE_SKIP == 0:
+            t = time.time() - loginfo['t0']
             vali_loss = loss_function(parameters, vali_batch)
             if i % (MEASURE_SKIP*4) == 0:
                 print (i + 1)*batch_size, '\t\tVALI:', vali_loss
 
-            loginfo['train_file'].write(exp_name+' '+str((i + 1)*batch_size)+' '+str(loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
-            loginfo['vali_file'].write(exp_name+' '+str((i + 1)*batch_size)+' '+str(vali_loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+            loginfo['train_file'].write(exp_name + ' ' + str(t) + ' ' + str((i + 1)*batch_size)+' '+str(loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
+            loginfo['vali_file'].write(exp_name+' '+ str(t) + ' ' + str((i + 1)*batch_size)+' '+str(vali_loss)+' ' + str(loginfo['rep'])+' ' + loginfo['method']+'\n')
 
             # flush both files now and again
             loginfo['vali_file'].flush()
@@ -200,7 +202,7 @@ def logging(d, noise, batch_size, n_batches, start_from_rep, identifier=None):
     R_test = open(logging_path+'_test.txt', 'a')
     if start_from_rep == 0:
         # headers
-        header = 'experiment training_examples loss rep method'
+        header = 'experiment t training_examples loss rep method'
         R_vali.write(header+'\n')
         R_train.write(header+'\n')
         R_test.write('experiment loss rep method\n')
@@ -281,9 +283,10 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         for experiment in experiments:
             exp_name = experiment.name
             print 'Running', exp_name, 'experiment!'
-            # 'reset' the permutation on the complex_RNN
+            # 'reset' things
             if exp_name == 'complex_RNN':
                 experiment.set_loss()
+            loginfo['t0'] = time.time()
             # train!
             trained_parameters = train_loop(experiment, 
                                             train_batches, vali_batch, 
