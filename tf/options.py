@@ -176,7 +176,8 @@ class Experiment(object):
                  project=False, 
                  random_projections=0,
                  restrict_parameters=False,
-                 theano_reflection=False):
+                 theano_reflection=False,
+                 change_of_basis=False):
         # required
         self.name = name
         self.d = d
@@ -185,16 +186,17 @@ class Experiment(object):
         self.random_projections = random_projections
         self.restrict_parameters = restrict_parameters
         self.theano_reflection = theano_reflection
+        self.change_of_basis = change_of_basis
         # check
         self.check_attributes()
         # defaults
         self.test_loss = -9999
         self.learning_rate = 0.001
-        self.num_projections = 5
         # derived
         self.set_loss()
         self.set_learnable_parameters()
-        # TODO
+        self.set_basis_change()
+        # TODO (sparse)
         self.nonzero_index = None
 
     def check_attributes(self):
@@ -265,6 +267,15 @@ class Experiment(object):
             self.learnable_parameters = learnable_parameters
         else:
             self.learnable_parameters = np.arange(d*d)
+        return True
+
+    def set_basis_change(self, scale=10):
+        if self.change_of_basis:
+            d = self.d
+            basis_change = np.random.uniform(low=-scale, high=scale, size=(d,d))
+            self.basis_change = basis_change
+        else:
+            self.basis_change = None
         return True
 
 # === specific experimental designs === #
