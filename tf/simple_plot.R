@@ -4,7 +4,7 @@ args<-commandArgs(TRUE)
 PLOT_TRAIN<-FALSE
 
 d<-args[1]
-noise<-args[2]
+noise<-0.01
 
 fname_base<-paste0('output/simple/fft1_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
@@ -12,6 +12,7 @@ print(fname_base)
 # --- vali --- #
 fname<-paste0(fname_base, 'vali.txt')
 data<-read.table(fname, header=T)
+print(levels(factor(data$rep)))
 data['rep']<-NULL
 data['method']<-NULL
 
