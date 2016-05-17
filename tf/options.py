@@ -9,6 +9,9 @@
 # ------------------------------------------
 
 import numpy as np
+from unitary_np import unitary_matrix
+from scipy.fftpack import fft, ifft
+from functools import partial
 
 valid_experiments = {'trivial', 'free_matrix', 'projection', 'complex_RNN',
                      'complex_RNN_vanilla', 'general_unitary', 
@@ -207,6 +210,9 @@ class Experiment(object):
 
         if self.theano_reflection and not self.name == 'complex_RNN_vanilla':
             raise ValueError(self.theano_reflection)
+
+        if self.name == 'projection' and not self.project:
+            raise ValueError(self.project)
         
     def initial_parameters(self):
         """
@@ -234,6 +240,7 @@ class Experiment(object):
         """
         Pick the loss function.
         """
+        print '(re)setting loss function.'
         if self.name in {'trivial'}:
             fn = trivial_loss
         elif self.name in {'free_matrix', 'projection'}:
@@ -258,3 +265,27 @@ class Experiment(object):
         else:
             self.learnable_parameters = np.arange(d*d)
         return True
+
+# === specific experimental designs === #
+def presets(d):
+    """
+    Returns a list of 'preset' experiment objects.
+    """
+    proj = Experiment('projection', d, project=True)
+    complex_RNN = Experiment('complex_RNN', d)
+    general = Experiment('general_unitary', d)
+    exp_list = [proj, complex_RNN, general]
+    if d > 7:
+        general_restrict = Experiment('general_unitary', d, restrict_parameters=True)
+        exp_list.append(general_restrict)
+    return exp_list
+
+def compare_random_project(d):
+    proj_with = Experiment('projection', d, project=True, random_projection=True)
+    proj_wo = Experiment('projection', d, project=True, random_projection=False)
+    complex_RNN_with = Experiment('complex_RNN', d, random_projection=True)
+    complex_RNN_wo = Experiment('complex_RNN', d, random_projection=False)
+    general_with = Experiment('general_unitary', d, random_projection=True)
+    general_wo = Experiment('general_unitary', d, random_projection=False)
+    exp_list = [proj_with, proj_wo, general_with, general_wo]
+    return exp_list
