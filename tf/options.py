@@ -174,7 +174,7 @@ class Experiment(object):
     """
     def __init__(self, name, d, 
                  project=False, 
-                 random_projection=False, 
+                 random_projections=0,
                  restrict_parameters=False,
                  theano_reflection=False):
         # required
@@ -182,7 +182,7 @@ class Experiment(object):
         self.d = d
         # with defaults
         self.project = project
-        self.random_projection = random_projection
+        self.random_projections = random_projections
         self.restrict_parameters = restrict_parameters
         self.theano_reflection = theano_reflection
         # check
@@ -190,6 +190,7 @@ class Experiment(object):
         # defaults
         self.test_loss = -9999
         self.learning_rate = 0.001
+        self.num_projections = 5
         # derived
         self.set_loss()
         self.set_learnable_parameters()
@@ -240,7 +241,7 @@ class Experiment(object):
         """
         Pick the loss function.
         """
-        print '(re)setting loss function.'
+        print '(experiment ' + self.name +'): (re)setting loss function.'
         if self.name in {'trivial'}:
             fn = trivial_loss
         elif self.name in {'free_matrix', 'projection'}:
@@ -280,12 +281,8 @@ def presets(d):
         exp_list.append(general_restrict)
     return exp_list
 
-def compare_random_project(d):
-    proj_with = Experiment('projection', d, project=True, random_projection=True)
-    proj_wo = Experiment('projection', d, project=True, random_projection=False)
-    complex_RNN_with = Experiment('complex_RNN', d, random_projection=True)
-    complex_RNN_wo = Experiment('complex_RNN', d, random_projection=False)
-    general_with = Experiment('general_unitary', d, random_projection=True)
-    general_wo = Experiment('general_unitary', d, random_projection=False)
-    exp_list = [proj_with, proj_wo, general_with, general_wo]
+def test_random_projections(d):
+    exp_list = []
+    for j in np.linspace(1, np.sqrt(d), num=5, dtype=int):
+        exp_list.append(Experiment('general_unitary', d, random_projections=j))
     return exp_list

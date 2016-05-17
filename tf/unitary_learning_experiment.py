@@ -63,7 +63,7 @@ def numerical_random_gradient(i, learnable_parameters, n, loss_function,
     return gradient_vector
 
 def numerical_gradient(loss_function, parameters, batch, pool, 
-                       random_projection=False, update_indices=None):
+                       random_projections=0, update_indices=None):
     """
     Calculate the numerical gradient of a given loss function with respect to 
     a np.array of parameters.
@@ -73,7 +73,7 @@ def numerical_gradient(loss_function, parameters, batch, pool,
         parameters
         batch
         pool
-        random_projection   bool indicating if we use random projection method
+        random_projections   how many random projections to use? 0 = none
         update_indices      an array/iterable of which indices to calculate 
                                 gradients for
     """
@@ -86,9 +86,8 @@ def numerical_gradient(loss_function, parameters, batch, pool,
     if update_indices is None:
         update_indices = xrange(len(parameters))
 
-    if random_projection:
-        # how many random projections to use? hmm...
-        N_RANDOM = 5
+    if random_projections > 0:
+        N_RANDOM = random_projections
         numerical_parallel = partial(numerical_random_gradient, 
                                      learnable_parameters=update_indices,
                                      n=n,
@@ -134,7 +133,7 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
 
     for (i, batch) in enumerate(train_batches):
         loss, d_params = numerical_gradient(loss_function, parameters, batch, pool,
-                                            random_projection=experiment.random_projection,
+                                            random_projections=experiment.random_projections,
                                             update_indices=experiment.learnable_parameters)
 
 
@@ -186,8 +185,15 @@ def true_baseline(U, test_batch):
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
     return loss
 
-def logging(d, noise, batch_size, n_batches, start_from_rep):
-    logging_path = 'output/simple/fft1_d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+def logging(d, noise, batch_size, n_batches, start_from_rep, identifier=None):
+    if identifier is None:
+        logging_path = 'output/simple/fft1_d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+    else:
+        assert type(identifier) == str
+        logging_path = 'output/simple/'+identifier+'_d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+
+    print 'Will be saving output to', logging_path
+
     # save to an R-plottable file because I am so very lazy
     R_vali = open(logging_path+'_vali.txt', 'a')
     R_train = open(logging_path+'_train.txt', 'a')
@@ -205,7 +211,8 @@ def logging(d, noise, batch_size, n_batches, start_from_rep):
     return R_vali, R_train, R_test
 
 # === main loop === #
-def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
+def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=0.01, 
+         start_from_rep=0):
     """
     Args:
         d
@@ -227,7 +234,8 @@ def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
         print 'WARNING: No n_epochs provided, using', n_epochs
   
     # === logging === #
-    R_vali, R_train, R_test = logging(d, noise, batch_size, n_batches, start_from_rep)
+    R_vali, R_train, R_test = logging(d, noise, batch_size, n_batches, 
+                                      start_from_rep, identifier)
     loginfo = {'vali_file': R_vali, 'train_file': R_train, 'rep': None, 'method': None}
 
     # === parallelism === #
@@ -273,6 +281,10 @@ def main(d, experiments, n_reps=3, n_epochs=1, noise=0.01, start_from_rep=0):
         for experiment in experiments:
             exp_name = experiment.name
             print 'Running', exp_name, 'experiment!'
+            # 'reset' the permutation on the complex_RNN
+            if exp_name == 'complex_RNN':
+                experiment.set_loss()
+            # train!
             trained_parameters = train_loop(experiment, 
                                             train_batches, vali_batch, 
                                             pool, loginfo)
