@@ -259,6 +259,7 @@ class Experiment(object):
         n_parameters = np.prod(ip.shape)
         if ip.dtype == 'complex':
             n_parameters = 2*n_parameters
+        assert n_parameters == self.n_parameters
         print 'Initialising', n_parameters, 'real parameters.'
         return ip
 
@@ -269,16 +270,20 @@ class Experiment(object):
         print '(experiment ' + self.name +'): (re)setting loss function.'
         if self.name in {'trivial'}:
             fn = trivial_loss
+            self.n_parameters = self.d
         elif self.name in {'free_matrix', 'projection'}:
             fn = free_matrix_loss
+            self.n_parameters = self.d*self.d
         elif 'complex_RNN' in self.name:
             permutation = np.random.permutation(np.eye(self.d))
             fn = partial(complex_RNN_loss, permutation=permutation, 
                          theano_reflection=self.theano_reflection)
+            self.n_parameters = 7*self.d
         elif 'general_unitary' in self.name:
             if self.change_of_basis > 0 and self.basis_change is None:
                 self.set_basis_change()
             fn = partial(general_unitary_loss, basis_change=self.basis_change)
+            self.n_parameters = self.d*self.d
         else:
             raise ValueError(self.name)
 
@@ -291,7 +296,7 @@ class Experiment(object):
             learnable_parameters = np.random.choice(d*d, 7*d, replace=False)
             self.learnable_parameters = learnable_parameters
         else:
-            self.learnable_parameters = np.arange(d*d)
+            self.learnable_parameters = np.arange(self.n_parameters)
         return True
 
     def set_basis_change(self):
