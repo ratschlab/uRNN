@@ -231,7 +231,7 @@ class Experiment(object):
         """
         if self.d <= 7 and self.restrict_parameters:
             print 'WARNING: d is <= 7, but restrict parameters is true. It will have no effect.'
-        if self.restrict_parameters and 'general_unitary' in self.name:
+        if self.restrict_parameters and not 'general_unitary' in self.name:
             print 'WARNING: restrict_parameters is only implemented for unitary experiments. It will have no effect.'
 
         if self.theano_reflection and not self.name == 'complex_RNN_vanilla':
@@ -331,4 +331,18 @@ def basis_change(d):
     general_basis_1 = Experiment('general_unitary_basis10', d, change_of_basis=10)
     general_basis_2 = Experiment('general_unitary_basis50', d, change_of_basis=50)
     exp_list = [general_default, general_basis_1, general_basis_2]
+    return exp_list
+
+def rerun(d):
+    """
+    Steph is silly.
+    """
+    proj = Experiment('projection', d, project=True)
+    complex_RNN = Experiment('complex_RNN', d)
+    general = Experiment('general_unitary', d)
+    general_basis_5 = Experiment('general_unitary_basis5', d, change_of_basis=5)
+    exp_list = [proj, complex_RNN, general, general_basis_5]
+    if d > 7:
+        general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=True)
+        exp_list.append(general_restricted)
     return exp_list
