@@ -303,7 +303,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
 
         # === report at the end of the rep === #
         print '\t\tRep', rep, 'completed. Test losses:'
-        for (name, test_loss) in baselines:
+        for (name, test_loss) in baselines.iteritems():
             print name, ':', loss
         for experiment in experiments:
             print experiment.name, ':', experiment.test_loss
