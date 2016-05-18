@@ -318,11 +318,12 @@ def presets(d):
         exp_list.append(general_restrict)
     return exp_list
 
-def test_random_projections(d):
+def test_random_projections(d=6):
     exp_list = []
-    for j in [20, 30, 36, 0]:
+    for j in [4, 9, 16, 25, 36]
         #    for j in np.linspace(np.sqrt(d), 0.5*d*(d-1), num=3, dtype=int):
         exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
+    exp_list.append(Experiment('general_unitary', d))
     return exp_list
 
 def basis_change(d):
