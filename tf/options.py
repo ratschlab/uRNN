@@ -320,7 +320,7 @@ def presets(d):
 
 def test_random_projections(d=6):
     exp_list = []
-    for j in [4, 9, 16, 25, 36]
+    for j in [4, 9, 16, 25, 36]:
         #    for j in np.linspace(np.sqrt(d), 0.5*d*(d-1), num=3, dtype=int):
         exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
     exp_list.append(Experiment('general_unitary', d))
