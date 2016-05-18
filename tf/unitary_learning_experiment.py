@@ -27,7 +27,7 @@ from random import sample
 from options import presets
 
 # === some globals === #
-MEASURE_SKIP = 100
+MEASURE_SKIP = 250
 NUM_WORKERS = 32
 
 # === utility functions === #
@@ -248,8 +248,8 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
 
     # === outer rep loop! === #
     for rep in xrange(start_from_rep, start_from_rep + n_reps):
-        # randomly select the method to generate test data
-        method = sample(['lie_algebra', 'qr', 'composition'], 1)[0]
+        # select a different method each time (let's not be random about this)
+        method = ['lie_algebra', 'qr', 'composition'][rep % 6]
         if method == 'sparse':
             raise NotImplementedError
             nonzero_index = sample(xrange(d*d), 1)[0]
