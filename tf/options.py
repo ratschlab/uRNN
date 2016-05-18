@@ -98,7 +98,7 @@ def do_reflection(x, v_re, v_im, theano_reflection=False):
 
     return output
 
-def complex_RNN_loss(parameters, batch, permutation, theano_reflection=True):
+def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     """
     Transform data according to the complex_RNN transformations.
     (requires importing a bunch of things and weird tensorflow hax)
@@ -146,6 +146,36 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=True):
     differences = y_hat - y
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
     return loss
+
+def complex_RNN_multiloss(parameters, permutations, batch):
+    """
+    Transform data according to the complex_RNN transformations.
+    ... but now with n*n parameters.
+    We achieve this by repeating the basic components.
+    
+    Components:
+        D   (n params)
+        R   (2n params)
+        F   0 params
+        Pi  0 params
+
+    Canonical form:
+        U = D_3 R_2 \mathcal{F}^{-1} D_2 \Pi R_1 \mathcal{F} D_1
+
+    ... bleh, this has no obvious pattern.
+
+    Putting two Ds beside each other is largely uninteresting.
+    """
+    raise NotImplementedError
+    # === split up parameters, permutations
+
+    # === combine in components
+
+    # === get the loss
+
+    return loss
+    
+    
 
 def general_unitary_loss(parameters, batch, basis_change=None):
     """
@@ -290,7 +320,8 @@ def presets(d):
 
 def test_random_projections(d):
     exp_list = []
-    for j in np.linspace(np.sqrt(d), 0.5*d*(d-1), num=3, dtype=int):
+    for j in [20, 30, 36, 0]:
+        #    for j in np.linspace(np.sqrt(d), 0.5*d*(d-1), num=3, dtype=int):
         exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
     return exp_list
 
