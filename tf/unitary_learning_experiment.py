@@ -268,11 +268,17 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         loginfo['rep'] = rep
 
         # === the data === #
-        batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs, noise=noise)
+        # we assume n_batches is for training data
+        # vali and test will both be 10% of that
+        # ... but we combine it into one batch
+        n_batches_vali = int(0.1*n_batches)
+        n_batches_test = n_batches_vali
+        n_vali = n_batches_vali*batch_size
+        n_test = n_batches_test*batch_size
 
-        vali_batch = batches[0]
-        test_batch = batches[1]
-        train_batches = batches[2:]
+        train_batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs, noise=noise)
+        vali_batch = generate_unitary_learning(U, n_vali, num_batches=1, num_epochs=1, noise=noise)[0]
+        test_batch = generate_unitary_learning(U, n_test, num_batches=1, num_epochs=1, noise=noise)[0]
 
         # === baselines === #
         random_test_loss = random_baseline(test_batch, method=method)
