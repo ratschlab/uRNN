@@ -249,7 +249,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
     # === outer rep loop! === #
     for rep in xrange(start_from_rep, start_from_rep + n_reps):
         # select a different method each time (let's not be random about this)
-        method = ['lie_algebra', 'qr', 'composition'][rep % 6]
+        method = ['lie_algebra', 'qr', 'composition'][rep % 3]
         if method == 'sparse':
             raise NotImplementedError
             nonzero_index = sample(xrange(d*d), 1)[0]
