@@ -257,9 +257,9 @@ class Experiment(object):
             raise ValueError(self.name)
        
         n_parameters = np.prod(ip.shape)
+        assert n_parameters == self.n_parameters
         if ip.dtype == 'complex':
             n_parameters = 2*n_parameters
-        assert n_parameters == self.n_parameters
         print 'Initialising', n_parameters, 'real parameters.'
         return ip
 
