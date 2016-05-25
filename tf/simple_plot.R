@@ -4,9 +4,11 @@ args<-commandArgs(TRUE)
 PLOT_TRAIN<-FALSE
 
 d<-args[1]
+#identifier<-args[2]
 noise<-0.01
 
-fname_base<-paste0('output/simple/fft1_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/nips/random_projections_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
 
 # --- vali --- #
@@ -16,7 +18,7 @@ print(levels(factor(data$rep)))
 data['rep']<-NULL
 data['method']<-NULL
 
-ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom") + ylim(0, 10)
+ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom") + ylim(0, 6)
 ggsave(gsub(".txt", ".png", fname))
 
 # --- train --- # (copy pasta)
