@@ -276,12 +276,11 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True,
 
 # === some grad hacks === #
 
-def numerical_partial_gradient(e, L=None, n=None, U=None, dcost_dU=None, EPSILON=None):
+def numerical_partial_gradient(e, L=None, n=None, U=None, dcost_dU_re=None, dcost_dU_im=None, EPSILON=None):
     """ For giving to the pool.
     """
     dU_dlambda = (expm(L + EPSILON*lie_algebra_basis_element(n, e, complex_out=True)) - U)/EPSILON
-    # TODO: hmm, how do we ensure that delta lambda is REAL?
-    delta = np.abs(np.trace(np.dot(dcost_dU, dU_dlambda)))
+    delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
     return delta
 
 def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, 
