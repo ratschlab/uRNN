@@ -276,7 +276,7 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True,
 
 # === some grad hacks === #
 
-def numerical_partial_gradient(e, L=None, n=None, U=None, dcost_dU_re=None, dcost_dU_im=None, EPSILON=None):
+def numerical_partial_gradient(e, L, n, U, dcost_dU_re, dcost_dU_im, EPSILON):
     """ For giving to the pool.
     """
     dU_dlambda = (expm(L + EPSILON*lie_algebra_basis_element(n, e, complex_out=True)) - U)/EPSILON
@@ -291,8 +291,6 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
     """
     # first term (d cost / d U)
     assert dcost_dU_re.shape == dcost_dU_im.shape
-    dcost_dU = dcost_dU_re + 1j*dcost_dU_im
-    n = dcost_dU.shape[0]
     assert len(lambdas) == n*n
 
     # second term (d U / d lambdas)
@@ -302,7 +300,8 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
 
     # parallel version
     numerical_parallel = partial(numerical_partial_gradient, L=L, U=U, n=n, 
-                                 dcost_dU=dcost_dU, EPSILON=EPSILON)
+                                 dcost_dU_re=dcost_dU_re, dcost_dU_im=dcost_dU_im, 
+                                 EPSILON=EPSILON)
     dlambdas = np.array(map(numerical_parallel, xrange(n*n)))
     lambdas += learning_rate*dlambdas
     
