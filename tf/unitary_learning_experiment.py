@@ -234,7 +234,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         assert exp.d == d
     # OPTIONS
     batch_size = 20
-    n_batches = 50000
+    n_batches = 5000
     if n_epochs is None:
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs
@@ -250,7 +250,11 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
     # === outer rep loop! === #
     for rep in xrange(start_from_rep, start_from_rep + n_reps):
         # select a different method each time (let's not be random about this)
-        method = ['lie_algebra', 'qr', 'composition'][rep % 3]
+        if real:
+            # we have to generate a special unitary matrix...
+            method = 'lie_algebra'
+        else:
+            method = ['lie_algebra', 'qr', 'composition'][rep % 3]
         if method == 'sparse':
             raise NotImplementedError
             nonzero_index = sample(xrange(d*d), 1)[0]
@@ -284,7 +288,8 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
 
         # === baselines === #
         random_test_loss = random_baseline(test_batch, method=method, real=False)
-        random_re_test_loss = random_baseline(test_batch, method=method, real=True)
+        if not method == 'composition':
+            random_re_test_loss = random_baseline(test_batch, method=method, real=True)
         true_test_loss = true_baseline(U, test_batch)
         baselines = {'random_unitary': random_test_loss,
                      'random_orthogonal': random_re_test_loss,
@@ -314,7 +319,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
 
         # === report at the end of the rep === #
         print '\t\tRep', rep, 'completed. Test losses:'
-        for (name, test_loss) in baselines.iteritems():
+        for (name, loss) in baselines.iteritems():
             print name, ':', loss
         for experiment in experiments:
             print experiment.name, ':', experiment.test_loss
