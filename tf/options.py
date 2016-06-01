@@ -203,7 +203,8 @@ class Experiment(object):
                  random_projections=0,
                  restrict_parameters=False,
                  theano_reflection=False,
-                 change_of_basis=0):
+                 change_of_basis=0,
+                 real=False):
         # required
         self.name = name
         self.d = d
@@ -213,6 +214,7 @@ class Experiment(object):
         self.restrict_parameters = restrict_parameters
         self.theano_reflection = theano_reflection
         self.change_of_basis = change_of_basis
+        self.real = real
         # check
         self.check_attributes()
         # defaults
@@ -239,6 +241,9 @@ class Experiment(object):
 
         if self.name == 'projection' and not self.project:
             raise ValueError(self.project)
+
+        if self.real and 'complex_RNN' in self.name:
+            raise ValueError(self.real)
         
     def initial_parameters(self):
         """
@@ -246,9 +251,15 @@ class Experiment(object):
         """
         d = self.d
         if self.name in {'trivial'}:
-            ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
+            if self.real:
+                ip = np.random.normal(size=d)
+            else:
+                ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
         elif self.name in {'free_matrix', 'projection'}:
-            ip = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
+            if self.real:
+                ip = np.random.normal(size=d*d)
+            else:
+                ip = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
         elif 'complex_RNN' in self.name:
             ip = np.random.normal(size=7*d)
         elif 'general_unitary' in self.name:
@@ -259,6 +270,7 @@ class Experiment(object):
         n_parameters = np.prod(ip.shape)
         assert n_parameters == self.n_parameters
         if ip.dtype == 'complex':
+            assert not self.real
             n_parameters = 2*n_parameters
         print 'Initialising', n_parameters, 'real parameters.'
         return ip
