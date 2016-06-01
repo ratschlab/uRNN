@@ -283,9 +283,12 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         test_batch = generate_unitary_learning(U, n_test, num_batches=1, num_epochs=1, noise=noise, real=real)[0]
 
         # === baselines === #
-        random_test_loss = random_baseline(test_batch, method=method, real=real)
+        random_test_loss = random_baseline(test_batch, method=method, real=False)
+        random_re_test_loss = random_baseline(test_batch, method=method, real=True)
         true_test_loss = true_baseline(U, test_batch)
-        baselines = {'random_unitary': random_test_loss, 'true': true_test_loss}
+        baselines = {'random_unitary': random_test_loss,
+                     'random_orthogonal': random_re_test_loss,
+                     'true': true_test_loss}
         for (name, loss) in baselines.iteritems():
             R_test.write(name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
         R_test.flush()
