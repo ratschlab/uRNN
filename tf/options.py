@@ -239,16 +239,19 @@ class Experiment(object):
             self.restrict_parameters = False
 
         if self.theano_reflection and not self.name == 'complex_RNN_vanilla':
-            raise ValueError(self.theano_reflection)
+            raise ValueError(self.name, self.theano_reflection)
 
-        if self.name == 'projection' and not self.project:
-            raise ValueError(self.project)
+        if 'projection' in self.name and not self.project:
+            raise ValueError(self.name, self.project)
 
         if self.real:
             if 'complex_RNN' in self.name:
-                raise ValueError(self.real)
+                raise ValueError(self.name, self.real)
             if 'unitary' in self.name:
-                raise ValueError(self.real)
+                raise ValueError(self.name, self.real)
+
+        if 'orthogonal' in self.name and not self.real:
+            raise ValueError(self.name, self.real)
         
     def initial_parameters(self):
         """
@@ -260,7 +263,7 @@ class Experiment(object):
                 ip = np.random.normal(size=d)
             else:
                 ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
-        elif self.name in {'free_matrix', 'projection'}:
+        elif 'projection' in self.name or self.name == 'free_matrix':
             if self.real:
                 ip = np.random.normal(size=d*d)
             else:
@@ -290,7 +293,7 @@ class Experiment(object):
         if self.name in {'trivial'}:
             fn = trivial_loss
             self.n_parameters = self.d
-        elif self.name in {'free_matrix', 'projection'}:
+        elif 'projection' in self.name or self.name == 'free_matrix':
             fn = free_matrix_loss
             self.n_parameters = self.d*self.d
         elif 'complex_RNN' in self.name:
