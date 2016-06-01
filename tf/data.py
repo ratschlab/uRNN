@@ -89,7 +89,8 @@ def create_batches(x, y, batch_size, num_batches, num_epochs):
             batches.append((x_batch, y_batch))
     return batches
 
-def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1, noise=0.01):
+def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1, 
+                              noise=0.01, real=False):
     """
     Given a unitary matrix U, generate batch_size pairs of
         {x_i, y_i}
@@ -101,11 +102,17 @@ def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1, noise=
  
     num_examples = batch_size * num_batches
 
-    x = np.random.normal(size=(num_examples, d)) + 1j*np.random.normal(size=(num_examples, d))
+    if real:
+        x = np.random.normal(size=(num_examples, d))
+    else:
+        x = np.random.normal(size=(num_examples, d)) + 1j*np.random.normal(size=(num_examples, d))
     y = np.dot(x, U.T)
     if noise > 0:
         print 'Adding noise...'
-        y += np.random.normal(scale=noise, size=y.shape) + 1j*np.random.normal(scale=noise, size=y.shape)
+        if real:
+            y += np.random.normal(scale=noise, size=y.shape)
+        else:
+            y += np.random.normal(scale=noise, size=y.shape) + 1j*np.random.normal(scale=noise, size=y.shape)
 
     batches = create_batches(x, y, batch_size, num_batches, num_epochs)
     return batches
