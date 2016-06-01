@@ -383,3 +383,11 @@ def rerun(d):
     return exp_list
 
 # === more experiments 1/6/16 === #
+def test_orth(d):
+    """ testing new features """
+    proj_real = Experiment('projection_real', d, project=True, real=True)
+    proj_complex = Experiment('projection_complex', d, project=True)
+    general_unitary = Experiment('general_unitary', d)
+    general_orthogonal = Experiment('general_orthogonal', d, real=True)
+    exp_list = [proj_real, proj_complex, general_unitary, general_orthogonal]
+    return exp_list
