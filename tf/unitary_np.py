@@ -291,6 +291,7 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
     """
     # first term (d cost / d U)
     assert dcost_dU_re.shape == dcost_dU_im.shape
+    n = dcost_dU_re.shape[0]
     assert len(lambdas) == n*n
 
     # second term (d U / d lambdas)
@@ -309,3 +310,15 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
     U_new = expm(lie_algebra_element(n, lambdas))
 
     return np.real(U_new), np.imag(U_new), lambdas, dlambdas
+
+def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas):
+    """
+    Given dcost/dU, get dcost/dlambdas
+    Using... linear algebra!
+    """
+    n = dcost_dU_re.shape[0]
+    assert len(lambdas) == n*n
+    L = lie_algebra_element(n, lambdas)
+    # ... ugh code ain't here, w/e i'll get it later
+    raise NotImplementedError
+    return L, L, lambdas, lambdas
