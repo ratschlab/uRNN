@@ -177,7 +177,7 @@ def complex_RNN_multiloss(parameters, permutations, batch):
     
     
 
-def general_unitary_loss(parameters, batch, basis_change=None):
+def general_unitary_loss(parameters, batch, basis_change=None, real=False):
     """
     Hey, it's my one! Rendered very simple by existence of helper functions. :)
     """
@@ -185,7 +185,7 @@ def general_unitary_loss(parameters, batch, basis_change=None):
     d = x.shape[1]
 
     lambdas = parameters
-    U = unitary_matrix(d, lambdas=lambdas, basis_change=basis_change)
+    U = unitary_matrix(d, lambdas=lambdas, basis_change=basis_change, real=real)
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
@@ -231,10 +231,12 @@ class Experiment(object):
         """
         Make sure attributes are sensible.
         """
-        if self.d <= 7 and self.restrict_parameters:
-            print 'WARNING: d is <= 7, but restrict parameters is true. It will have no effect.'
-        if self.restrict_parameters and not 'general_unitary' in self.name:
-            print 'WARNING: restrict_parameters is only implemented for unitary experiments. It will have no effect.'
+        if self.restrict_parameters:
+            if self.d <= 7:
+                print 'WARNING: d is <= 7, but restrict parameters is true. Setting false.'
+            if not 'general' in self.name:
+                print 'WARNING: restrict_parameters is only implemented for general unitary/orthogonal experiments. Setting false.'
+            self.restrict_parameters = False
 
         if self.theano_reflection and not self.name == 'complex_RNN_vanilla':
             raise ValueError(self.theano_reflection)
@@ -242,8 +244,11 @@ class Experiment(object):
         if self.name == 'projection' and not self.project:
             raise ValueError(self.project)
 
-        if self.real and 'complex_RNN' in self.name:
-            raise ValueError(self.real)
+        if self.real:
+            if 'complex_RNN' in self.name:
+                raise ValueError(self.real)
+            if 'unitary' in self.name:
+                raise ValueError(self.real)
         
     def initial_parameters(self):
         """
@@ -264,6 +269,8 @@ class Experiment(object):
             ip = np.random.normal(size=7*d)
         elif 'general_unitary' in self.name:
             ip = np.random.normal(size=d*d)
+        elif 'general_orthogonal' in self.name:
+            ip = np.random.normal(size=d*(d-1)/2)
         else:
             raise ValueError(self.name)
        
@@ -291,11 +298,18 @@ class Experiment(object):
             fn = partial(complex_RNN_loss, permutation=permutation, 
                          theano_reflection=self.theano_reflection)
             self.n_parameters = 7*self.d
-        elif 'general_unitary' in self.name:
+        elif 'general_' in self.name:
             if self.change_of_basis > 0 and self.basis_change is None:
                 self.set_basis_change()
-            fn = partial(general_unitary_loss, basis_change=self.basis_change)
-            self.n_parameters = self.d*self.d
+            fn = partial(general_unitary_loss, 
+                         basis_change=self.basis_change,
+                         real=self.real)
+            if 'unitary' in self.name:
+                self.n_parameters = self.d*self.d
+            elif 'orthogonal' in self.name:
+                self.n_parameters = self.d*(self.d-1)/2
+            else:
+                raise ValueError(self.name)
         else:
             raise ValueError(self.name)
 
@@ -364,3 +378,5 @@ def rerun(d):
         general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=True)
         exp_list.append(general_restricted)
     return exp_list
+
+# === more experiments 1/6/16 === #
