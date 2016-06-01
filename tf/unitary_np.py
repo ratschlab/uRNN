@@ -16,7 +16,7 @@ from scipy.fftpack import fft, ifft
 
 from functools import partial
 
-def lie_algebra_element(n, lambdas, check_skew_hermitian=False, real=False):
+def lie_algebra_element(n, lambdas, check_skew_hermitian=False, check_real=False):
     """
     Explicitly construct an element of a Lie algebra, assuming 'default' basis,
     given a set of coefficients (lambdas).
@@ -32,30 +32,32 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False, real=False):
         n:              see above
         lambdas:        a ndarray of length n x n
         check_skew_hermitian
-        real            whether or not to return orthogonal matrix
     Returns:
         a rank-2 numpy ndarray dtype complex, the element of the Lie algebra
 
     POSSIBLE TODO: create basis-element generator
     """
-    lie_algebra_dim = n*n
-    assert len(lambdas) == lie_algebra_dim
-
-    if real:
+    if len(lambdas) == n*(n-1)/2:
+        # orthoognal case
         L = np.zeros(shape=(n, n))
-        for e in xrange(0, lie_algebra_dim):
-            # TODO: this is wildly inefficient
-            # (we're just zeroing out complex basis elements :|)
-            # (better way: know which e correspond to the basis of so(n))
-            # TODO: then lambdas can be a shorter vector
-            T_re, T_im = lie_algebra_basis_element(n, e, complex_out=False)
-            L += lambdas[e]*Tre
-    else:
+        for i in xrange(0, n):
+            for j in xrange(0, i):
+                # the i > j cases are the real ones
+                e = n*i + j
+                T_re, T_im = lie_algebra_basis_element(n, e, complex_out=False)
+                if check_real:
+                    # the T_im *should* be zero
+                    assert np.array_equal(T_im, np.zeros_like(T_im))
+                L += lambdas[e]*Tre
+    elif len(lambdas) == n*n:
+        # unitary case
         L = np.zeros(shape=(n, n), dtype=complex)
-        for e in xrange(0, lie_algebra_dim):
+        for e in xrange(0, n*n):
             T = lie_algebra_basis_element(n, e, complex_out=True)
             L += lambdas[e]*T
-    
+    else:
+        raise ValueError(lambdas)
+
     if check_skew_hermitian:
         assert np.array_equal(np.transpose(np.conj(L)), -L)
 
