@@ -40,6 +40,7 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False, check_real=False
     if len(lambdas) == n*(n-1)/2:
         # orthoognal case
         L = np.zeros(shape=(n, n))
+        lambda_index = 0
         for i in xrange(0, n):
             for j in xrange(0, i):
                 # the i > j cases are the real ones
@@ -48,7 +49,8 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False, check_real=False
                 if check_real:
                     # the T_im *should* be zero
                     assert np.array_equal(T_im, np.zeros_like(T_im))
-                L += lambdas[e]*Tre
+                L += lambdas[lambda_index]*T_re
+                lambda_index += 1
     elif len(lambdas) == n*n:
         # unitary case
         L = np.zeros(shape=(n, n), dtype=complex)
