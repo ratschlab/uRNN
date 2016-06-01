@@ -5,7 +5,7 @@
 # Lightly modified from the original, for TensorFlow and readability.
 
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 import pdb
 
 def generate_adding(T, num_examples):
@@ -105,7 +105,7 @@ def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1, noise=
     y = np.dot(x, U.T)
     if noise > 0:
         print 'Adding noise...'
-        y += np.random.normal(scale=noise) + 1j*np.random.normal(scale=noise)
+        y += np.random.normal(scale=noise, size=y.shape) + 1j*np.random.normal(scale=noise, size=y.shape)
 
     batches = create_batches(x, y, batch_size, num_batches, num_epochs)
     return batches

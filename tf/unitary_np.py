@@ -12,7 +12,7 @@ import numpy as np
 import pdb
 
 from scipy.linalg import expm, polar
-from scipy.fftpack import fft2, ifft2
+from scipy.fftpack import fft, ifft
 
 from functools import partial
 
@@ -168,7 +168,7 @@ def random_unitary_composition(n):
     thetas1 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
     diag1 = np.diag(np.cos(thetas1) + 1j*np.sin(thetas1))
     # fft
-    step2 = fft2(diag1)
+    step2 = fft(diag1)
     # skipping reflection
     step3 = step2
     # permutation
@@ -179,7 +179,7 @@ def random_unitary_composition(n):
     diag2 = np.diag(np.cos(thetas2) + 1j*np.sin(thetas2))
     step5 = np.dot(step4, diag2)
     # ifft
-    step6 = ifft2(step5)
+    step6 = ifft(step5)
     # skipping reflection
     step7 = step6
     # final diag
