@@ -163,14 +163,14 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
     print 'Training complete!'
     return parameters
 
-def random_baseline(test_batch, method):
+def random_baseline(test_batch, method, real=False):
     """
     Test using a random, UNITARY matrix.
     """
     x, y = test_batch
     d = x.shape[1]
 
-    M = unitary_matrix(d, method=method)
+    M = unitary_matrix(d, method=method, real=real)
     y_hat = np.dot(x, M)
     differences = y_hat - y
     loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
@@ -214,7 +214,7 @@ def logging(d, noise, batch_size, n_batches, start_from_rep, identifier=None):
 
 # === main loop === #
 def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=0.01, 
-         start_from_rep=0):
+         start_from_rep=0, real=False):
     """
     Args:
         d
@@ -223,6 +223,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         n_epochs
         noise
         start_from_rep          int         initialise rep counter to this
+        real                    whether to generate real (orthogonal) U
     """
     if experiments == 'presets':
         print 'WARNING: no experiments provided, using presets:'
@@ -256,15 +257,16 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
             method = 'sparse_'+str(nonzero_index)
             sparse_lambdas = np.zeros(shape=(d*d))
             sparse_lambdas[nonzero_index] = 1
-            U = unitary_matrix(d, method='lie_algebra', lambdas=sparse_lambdas)
+            U = unitary_matrix(d, method='lie_algebra',
+                               lambdas=sparse_lambdas, real=real)
             sparse_test = open(logging_path + '_sparse.txt', 'a')
             sparse_test.write('truth ' + map(lambda x: 'lambda_' + str(x), xrange(d*d)) + '\n')
         else:
-            U = unitary_matrix(d, method=method)
+            U = unitary_matrix(d, method=method, real=real)
 
-        print rep, ': generated U using:', method
+        print rep, ': generated '+real*'real ' + 'U using:', method
 
-        loginfo['method'] = method
+        loginfo['method'] = method+real*'_real'
         loginfo['rep'] = rep
 
         # === the data === #
@@ -276,12 +278,12 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         n_vali = n_batches_vali*batch_size
         n_test = n_batches_test*batch_size
 
-        train_batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs, noise=noise)
-        vali_batch = generate_unitary_learning(U, n_vali, num_batches=1, num_epochs=1, noise=noise)[0]
-        test_batch = generate_unitary_learning(U, n_test, num_batches=1, num_epochs=1, noise=noise)[0]
+        train_batches = generate_unitary_learning(U, batch_size, n_batches, n_epochs, noise=noise, real=real)
+        vali_batch = generate_unitary_learning(U, n_vali, num_batches=1, num_epochs=1, noise=noise, real=real)[0]
+        test_batch = generate_unitary_learning(U, n_test, num_batches=1, num_epochs=1, noise=noise, real=real)[0]
 
         # === baselines === #
-        random_test_loss = random_baseline(test_batch, method=method)
+        random_test_loss = random_baseline(test_batch, method=method, real=real)
         true_test_loss = true_baseline(U, test_batch)
         baselines = {'random_unitary': random_test_loss, 'true': true_test_loss}
         for (name, loss) in baselines.iteritems():
@@ -292,8 +294,8 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         for experiment in experiments:
             exp_name = experiment.name
             print 'Running', exp_name, 'experiment!'
-            # 'reset' things
             if 'complex_RNN' in exp_name:
+                # 'reset' things
                 experiment.set_loss()
             loginfo['t0'] = time.time()
             # train!
