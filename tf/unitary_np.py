@@ -16,8 +16,7 @@ from scipy.fftpack import fft, ifft
 
 from functools import partial
 
-def lie_algebra_element(n, lambdas, check_skew_hermitian=False):
-    # TODO: np-ify
+def lie_algebra_element(n, lambdas, check_skew_hermitian=False, real=False):
     """
     Explicitly construct an element of a Lie algebra, assuming 'default' basis,
     given a set of coefficients (lambdas).
@@ -32,24 +31,33 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False):
     Args:
         n:              see above
         lambdas:        a ndarray of length n x n
+        check_skew_hermitian
+        real            whether or not to return orthogonal matrix
     Returns:
         a rank-2 numpy ndarray dtype complex, the element of the Lie algebra
-        a 2D Tensor of shape [n, n], dtype tf.complex64, the element of the Lie algebra
 
-    POSSIBLE TODO: combine this with function to generate elements of the basis,
-        or create a basis-element generator
+    POSSIBLE TODO: create basis-element generator
     """
     lie_algebra_dim = n*n
     assert len(lambdas) == lie_algebra_dim
 
-    L = np.zeros(shape=(n, n), dtype=complex)
-
-    for e in xrange(0, lie_algebra_dim):
-        T = lie_algebra_basis_element(n, e, complex_out=True)
-        L += lambdas[e]*T
+    if real:
+        L = np.zeros(shape=(n, n))
+        for e in xrange(0, lie_algebra_dim):
+            # TODO: this is wildly inefficient
+            # (we're just zeroing out complex basis elements :|)
+            # (better way: know which e correspond to the basis of so(n))
+            # TODO: then lambdas can be a shorter vector
+            T_re, T_im = lie_algebra_basis_element(n, e, complex_out=False)
+            L += lambdas[e]*Tre
+    else:
+        L = np.zeros(shape=(n, n), dtype=complex)
+        for e in xrange(0, lie_algebra_dim):
+            T = lie_algebra_basis_element(n, e, complex_out=True)
+            L += lambdas[e]*T
     
     if check_skew_hermitian:
-        assert np.array_equal(np.transpose(np.conjugate(L)), -L)
+        assert np.array_equal(np.transpose(np.conj(L)), -L)
 
     return L
 
@@ -144,6 +152,7 @@ def project_to_unitary(parameters, check_unitary=True):
     U, p = polar(A, side='left')
 
     if check_unitary:
+        # (np.conj is harmless for real U)
         assert np.allclose(np.dot(U, np.conj(U.T)), np.eye(n))
 
     parameters = U.reshape(n*n)
@@ -189,9 +198,9 @@ def random_unitary_composition(n):
     return U
 
 def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True,
-                   basis_change=None):
+                   basis_change=None, real=False):
     """
-    Returns a random (or not) unitary matrix of dimension n x n.
+    Returns a random (or not) unitary (or orthogonal) matrix of dimension n x n.
     I give no guarantees about the distribution we draw this from.
     To do it 'properly' probably requires a Haar measure.
 
@@ -242,9 +251,10 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True,
                             before returning
         basis_change    (if method == lie algebra)  a matrix giving 
                             coefficients of 'new' basis wrt old basis (see above)
+        real            return a real (= orthogonal) matrix?
 
     Returns:
-        U               the unitary matrix
+        U               the unitary/orthogonal matrix
     """
     # give warnings if unnecessary options provided
     if not method == 'lie_algebra':
@@ -263,9 +273,14 @@ def unitary_matrix(n, method='lie_algebra', lambdas=None, check_unitary=True,
         L = lie_algebra_element(n, lambdas)
         U = expm(L)
     elif method == 'qr':
-        A = np.random.random(size=(n, n)) + 1j*np.random.random(size=(n, n))
+        if real:
+            A = np.random.random(size=(n, n))
+        else:
+            A = np.random.random(size=(n, n)) + 1j*np.random.random(size=(n, n))
         U, r = np.linalg.qr(A)
     elif method == 'composition':
+        if real:
+            raise ValueError(real)
         U = random_unitary_composition(n)
     else:
         raise ValueError(method)
