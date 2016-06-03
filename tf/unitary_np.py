@@ -328,9 +328,9 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
     # having updated the lambdas, get new U
     U_new = expm(lie_algebra_element(n, lambdas))
 
-    return np.real(U_new), np.imag(U_new), lambdas, dlambdas
+    return np.real(U_new), np.imag(U_new), dlambdas
 
-def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas):
+def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate=0.01):
     """
     Given dcost/dU, get dcost/dlambdas
     Using... linear algebra!
@@ -339,7 +339,6 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas):
     assert len(lambdas) == n*n or len(lambdas) == n*(n-1)/2
 
     L = lie_algebra_element(n, lambdas)
-    U = expm(L)
     dlambdas = np.zeros_like(lambdas)
     # here comes the trick
     # TODO: speed optimisation!!!!
@@ -379,4 +378,4 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas):
     
     # having updated the lambdas, get new U
     U_new = expm(lie_algebra_element(n, lambdas))
-    return np.real(U_new), np.imag(U_new), lambdas, dlambdas
+    return np.real(U_new), np.imag(U_new), dlambdas
