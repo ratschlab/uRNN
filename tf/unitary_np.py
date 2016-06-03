@@ -11,7 +11,7 @@
 import numpy as np
 import pdb
 
-from scipy.linalg import expm, polar
+from scipy.linalg import expm, polar, eigh
 from scipy.fftpack import fft, ifft
 
 from functools import partial
@@ -38,7 +38,7 @@ def lie_algebra_element(n, lambdas, check_skew_hermitian=False, check_real=False
     POSSIBLE TODO: create basis-element generator
     """
     if len(lambdas) == n*(n-1)/2:
-        # orthoognal case
+        # orthoognal case (subspace of the lie algebra!)
         L = np.zeros(shape=(n, n))
         lambda_index = 0
         for i in xrange(0, n):
@@ -299,7 +299,7 @@ def numerical_partial_gradient(e, L, n, U, dcost_dU_re, dcost_dU_im, EPSILON):
     """ For giving to the pool.
     """
     dU_dlambda = (expm(L + EPSILON*lie_algebra_basis_element(n, e, complex_out=True)) - U)/EPSILON
-    delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
+    delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
     return delta
 
 def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, 
@@ -336,8 +336,47 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas):
     Using... linear algebra!
     """
     n = dcost_dU_re.shape[0]
-    assert len(lambdas) == n*n
+    assert len(lambdas) == n*n or len(lambdas) == n*(n-1)/2
+
     L = lie_algebra_element(n, lambdas)
-    # ... ugh code ain't here, w/e i'll get it later
-    raise NotImplementedError
-    return L, L, lambdas, lambdas
+    U = expm(L)
+    dlambdas = np.zeros_like(lambdas)
+    # here comes the trick
+    # TODO: speed optimisation!!!!
+    w, v = eigh(1j*L)
+    w = -1j*w
+    vdag = np.conj(v.T)
+    expw = np.exp(w)
+    Ts = lie_algebra_basis(n)
+    if len(lambdas) == n*(n-1)/2:
+        # orthogonal case
+        T_indices = []
+        # itertools probably has a better solution for this but w/e
+        for i in xrange(0, n):
+            for j in xrange(0, i):
+                e = n*i + j
+                T_indices.append(e)
+    elif len(lambdas) == n*n:
+        T_indices = xrange(n*n)
+
+    #   so parallelisable!!!
+    for (i, e) in enumerate(T_indices):
+        T = Ts[e]
+        G = np.dot(np.dot(vdag, T), v)
+        V = np.empty(shape=(n, n), dtype=complex)
+        for r in xrange(n):
+            V[r, r] = G[r, r]*expw[r]
+            for s in xrange(r + 1, n):
+                V[r, s] = (expw[r] - expw[s])*G[r, s]/(w[r] - w[s])
+                V[s, r] = (expw[s] - expw[r])*G[s, r]/(w[s] - w[r])
+        grad = np.dot(np.dot(v, V), vdag)
+        dU_dlambda = grad
+        delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+        dlambdas[i] = delta
+
+    # done-ish, recombine
+    lambdas += learning_rate*dlambdas
+    
+    # having updated the lambdas, get new U
+    U_new = expm(lie_algebra_element(n, lambdas))
+    return np.real(U_new), np.imag(U_new), lambdas, dlambdas
