@@ -330,7 +330,8 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
 
     return np.real(U_new), np.imag(U_new), dlambdas
 
-def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate=0.01):
+def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, 
+                           learning_rate=0.01, speedy=False):
     """
     Given dcost/dU, get dcost/dlambdas
     Using... linear algebra!
@@ -341,37 +342,64 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate=0.01
     L = lie_algebra_element(n, lambdas)
     dlambdas = np.zeros_like(lambdas)
     # here comes the trick
-    # TODO: speed optimisation!!!!
     w, v = eigh(1j*L)
     w = -1j*w
     vdag = np.conj(v.T)
     expw = np.exp(w)
-    Ts = lie_algebra_basis(n)
-    if len(lambdas) == n*(n-1)/2:
-        # orthogonal case
-        T_indices = []
-        # itertools probably has a better solution for this but w/e
-        for i in xrange(0, n):
-            for j in xrange(0, i):
-                e = n*i + j
-                T_indices.append(e)
-    elif len(lambdas) == n*n:
-        T_indices = xrange(n*n)
+    if not speedy:
+        Ts = lie_algebra_basis(n)
+        if len(lambdas) == n*(n-1)/2:
+            # orthogonal case
+            T_indices = []
+            # itertools probably has a better solution for this but w/e
+            for i in xrange(0, n):
+                for j in xrange(0, i):
+                    e = n*i + j
+                    T_indices.append(e)
+        elif len(lambdas) == n*n:
+            T_indices = xrange(n*n)
 
-    #   so parallelisable!!!
-    for (i, e) in enumerate(T_indices):
-        T = Ts[e]
-        G = np.dot(np.dot(vdag, T), v)
-        V = np.empty(shape=(n, n), dtype=complex)
+        #   so parallelisable!!!
+        for (i, e) in enumerate(T_indices):
+            T = Ts[e]
+            G = np.dot(np.dot(vdag, T), v)
+            V = np.empty(shape=(n, n), dtype=complex)
+            for r in xrange(n):
+                V[r, r] = G[r, r]*expw[r]
+                for s in xrange(r + 1, n):
+                    V[r, s] = (expw[r] - expw[s])*G[r, s]/(w[r] - w[s])
+                    V[s, r] = (expw[s] - expw[r])*G[s, r]/(w[s] - w[r])
+            grad = np.dot(np.dot(v, V), vdag)
+            dU_dlambda = grad
+            delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+            dlambdas[i] = delta
+    else:
+        # woooo
+        one = np.ones([n, n])
+        M = (expw*one - (expw*one).T)/(w*one - (w*one).T)
+        M[xrange(n), xrange(n)] = expw
+        # k
+        lambda_index = 0
         for r in xrange(n):
-            V[r, r] = G[r, r]*expw[r]
-            for s in xrange(r + 1, n):
-                V[r, s] = (expw[r] - expw[s])*G[r, s]/(w[r] - w[s])
-                V[s, r] = (expw[s] - expw[r])*G[s, r]/(w[s] - w[r])
-        grad = np.dot(np.dot(v, V), vdag)
-        dU_dlambda = grad
-        delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
-        dlambdas[i] = delta
+            for s in xrange(n):
+                if r > s:
+                    # real asymmetric case
+                    WTW = np.outer(vdag[:, r], v[s, :]) - np.outer(vdag[:, s], v[r, :])
+                else:
+                    if len(lambdas) == n*(n-1)/2:
+                        # ditch it all
+                        continue
+                    elif r == s:
+                        # imag diag case
+                        WTW = 1j*np.outer(vdag[:, r], v[r, :])
+                    else:
+                        # imag symmetric
+                        WTW = 1j*(np.outer(vdag[:, s], v[r, :]) + np.outer(vdag[:, r], v[s, :]))
+                V = WTW*M
+                dU_dlambda = np.dot(np.dot(v, V), vdag)
+                delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+                dlambdas[lambda_index] = delta
+                lambda_index += 1
 
     # done-ish, recombine
     lambdas += learning_rate*dlambdas
