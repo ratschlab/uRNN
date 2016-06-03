@@ -156,6 +156,10 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
 
         # === update parameters
         parameters = parameters - experiment.learning_rate*d_params
+        # yolo
+        if 'general_orthogonal' in experiment.name:
+            pdb.set_trace()
+        # deyolo
         if experiment.project:
             # use the polar decomposition to re-unitarise the matrix
             parameters = project_to_unitary(parameters, check_unitary=False)
@@ -295,7 +299,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
                      'random_orthogonal': random_re_test_loss,
                      'true': true_test_loss}
         for (name, loss) in baselines.iteritems():
-            R_test.write(name + ' ' + str(loss) + ' ' + str(rep) + ' ' + method +'\n')
+            R_test.write(name + ' ' + str(loss) + ' ' + str(rep) + ' ' + loginfo['method'] +'\n')
         R_test.flush()
 
         # === run the experiments === #
@@ -314,7 +318,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
 
             # record this experimental result
             experiment.test_loss = test_loss
-            R_test.write(exp_name + ' ' + str(test_loss) + ' ' + str(rep) + ' ' + method + '\n')
+            R_test.write(exp_name + ' ' + str(test_loss) + ' ' + str(rep) + ' ' + loginfo['method'] + '\n')
             R_test.flush()
 
         # === report at the end of the rep === #
