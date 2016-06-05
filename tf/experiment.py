@@ -125,7 +125,7 @@ def main(experiment='adding', batch_size=10, state_size=20,
     print 'running', experiment, 'experiment with', model
     # === derivative options/values === #
     gradient_clipping = True
-    if model == 'complex_RNN':
+    if model in {'complex_RNN', 'ortho_tanhRNN', 'uRNN'}:
         gradient_clipping = False
     num_batches = N_TRAIN / batch_size
     identifier = experiment + '_' + model + '_' + str(T)
@@ -166,30 +166,45 @@ def main(experiment='adding', batch_size=10, state_size=20,
     # === ops and things === #
     cost = get_cost(outputs, y, loss_type)
     opt = create_optimiser(learning_rate)
-    if model == 'uRNN':
+    if model in {'ortho_tanhRNN', 'uRNN'}:
         # COMMENCE GRADIENT HACKS
-        lambdas = np.random.normal(size=(state_size*state_size))
-        U_re_name = 'RNN/uRNN/Unitary/Transition/Matrix/Real:0'
-        U_im_name = 'RNN/uRNN/Unitary/Transition/Matrix/Imaginary:0'
         nonU_variables = []
-        for var in tf.trainable_variables():
-            if var.name == U_re_name:
-                U_re_variable = var
-            elif var.name == U_im_name:
-                U_im_variable = var
-            else:
-                nonU_variables.append(var)
-        U_variables = [U_re_variable, U_im_variable]
-        # WARNING: dtype
-        U_new_re = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
-        U_new_im = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
+        if model == 'uRNN':
+            lambdas = np.random.normal(size=(state_size*state_size))
+            U_re_name = 'RNN/uRNN/Unitary/Transition/Matrix/Real:0'
+            U_im_name = 'RNN/uRNN/Unitary/Transition/Matrix/Imaginary:0'
+            for var in tf.trainable_variables():
+                if var.name == U_re_name:
+                    U_re_variable = var
+                elif var.name == U_im_name:
+                    U_im_variable = var
+                else:
+                    nonU_variables.append(var)
+            U_variables = [U_re_variable, U_im_variable]
+            # WARNING: dtype
+            U_new_re = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
+            U_new_im = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
+            # ops
+            assign_re_op = assign_variable(U_re_variable, U_new_re)
+            assign_im_op = assign_variable(U_im_variable, U_new_im)
+        else:
+            lambdas = np.random.normal(size=(state_size*(state_size-1)/2))
+            # TODO: check this name
+            U_name = 'RNN/tanhRNN/Linear/Transition/Matrix:0'
+            for var in tf.trainable_variables():
+                if var.name == U_name:
+                    U_variable = var
+                else:
+                    nonU_variables.append(var)
+            U_variables = [U_variable]
+            U_new = tf.placeholder(dtype=tf.float32, shape=[state_size, state_size])
+            # ops
+            assign_op = assign_variable(U_variable, U_new)
         # get gradients (alternately: just store indices and separate afterwards)
         g_and_v_nonU = get_gradients(opt, cost, gradient_clipping, nonU_variables)
         g_and_v_U = get_gradients(opt, cost, gradient_clipping, U_variables)
-        # now for ops 
+        # normal train op
         train_op = update_variables(opt, g_and_v_nonU)
-        assign_re_op = assign_variable(U_re_variable, U_new_re)
-        assign_im_op = assign_variable(U_im_variable, U_new_im)
                     
         # save-specific thing: saving lambdas
         lambda_file = open('output/' + identifier + '_lambdas.txt', 'w')
@@ -213,19 +228,19 @@ def main(experiment='adding', batch_size=10, state_size=20,
             for batch_index in xrange(num_batches):
                 # definitely scope for fancy iterator but yolo
                 batch_x, batch_y = train_data.get_batch(batch_index, batch_size)
-           
-                if model == 'uRNN':
+          
+                if model in {'uRNN', 'ortho_tanhRNN'}:
                     # CONTINUE GRADIENT HACKS
-                    # TODO: OPTIMISATION, TESTING
-                    # YOLO making sure U is being updated part 1
-                    U_re_orig, U_im_orig = session.run(U_variables)
-                    # DEYOLO
-                    dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
-                    pdb.set_trace()
-                    U_new_re_array, U_new_im_array, dlambdas = numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas)
-                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas)
-                    pdb.set_trace()
+                    # TODO: speed-profiling
+                    if model == 'uRNN':
+                        dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
+                    else:
+                        dcost_dU_re = session.run(g_and_v_U[0][0], {x:batch_x, y:batch_y})
+                        dcost_dU_im = np.zeros_like(dcost_dU_re)
+                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, speedy=True)
+                    assert np.array_equal(U_new_im_array, np.zeros_like(U_new_im_array))
                     # YOLO checking numerical gradients (EXPENSIVE)
+                    # TODO: figure out why these are different :/
 #                    basic_cost = session.run(cost, {x: batch_x, y:batch_y})
 #                    L = lie_algebra_element(state_size, lambdas)
 #                    numerical_dcost_dlambdas = np.zeros_like(lambdas)
@@ -242,9 +257,11 @@ def main(experiment='adding', batch_size=10, state_size=20,
 #                        numerical_dcost_dlambdas[e] = gradient
                     # now compare with dlambdas
 #                    np.mean(dlambdas - numerical_dcost_dlambdas)
-#                    pdb.set_trace()
                     # DEYOLO
-                    train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
+                    if model == 'uRNN':
+                        train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
+                    else:
+                        train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
                 else:
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 train_cost_trace.append(train_cost)
@@ -300,15 +317,3 @@ def runmo(model):
     """ wrapper script because that's how lazy I am """
     main(model=model)
     return True
-
-#if __name__ == "__main__":
-#    main()
-parser = argparse.ArgumentParser(description="run an experiment")
-parser.add_argument("--experiment", type=str, default='adding')
-parser.add_argument("--batch_size", type=int, default=20)
-parser.add_argument("--state_size", type=int, default=512)
-parser.add_argument("--T", type=int, default=200)
-parser.add_argument("--learning_rate", type=float, default=0.001)
-parser.add_argument("--model", default='orthogonal_RNN')
-parser.add_argument("--timestamp", type=bool, default=True)
-args = parser.parse_args()

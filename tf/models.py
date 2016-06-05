@@ -260,6 +260,8 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
         cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
     elif cell_type == 'uRNN':
         cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
+    elif cell_type == 'ortho_tanhRNN':
+        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size)
