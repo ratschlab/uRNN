@@ -5,7 +5,7 @@
 # Lightly modified from the original, for TensorFlow and readability.
 
 import numpy as np
-#import tensorflow as tf
+import tensorflow as tf
 import pdb
 
 def generate_adding(T, num_examples):

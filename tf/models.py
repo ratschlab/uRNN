@@ -39,6 +39,8 @@ def times_diag(arg, state_size, scope=None):
 def reflection(state, state_size, scope=None):
     """
     I do not entirely trust or believe the reflection operator in the theano version. :/
+    TODO: indeed, it is wrong, wrongish.
+    TODO: do the 'right' version.
     """
     # the reflections are initialised in a weird and tricky way: using initialize_matrix,
     # as if they are columns from a (2, state_size) matrix, so the range of random initialisation

@@ -114,7 +114,7 @@ def update_step(cost, learning_rate=0.01, clipping=False):
     return train_opt
 
 # == and now for main == #
-def main(experiment='adding', batch_size=10, state_size=20, 
+def main(experiment='adding', batch_size=20, state_size=40, 
          num_epochs=5, T=100, learning_rate=0.001,
          model='tanhRNN', timestamp=False):
     # randomly select experiment
