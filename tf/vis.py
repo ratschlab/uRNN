@@ -12,13 +12,13 @@ plt.clf()
 
 # === constants === #
 BATCH_SIZE = 20
-models = ['RNN', 'IRNN', 'LSTM', 'complex_RNN', 'orthogonal_RNN']
-colours = {'RNN': 'r', 'IRNN': 'pink', 'LSTM': 'g', 'complex_RNN': 'b', 'orthogonal_RNN': 'purple'}
+models = ['tanhRNN', 'IRNN', 'LSTM', 'complex_RNN', 'ortho_tanhRNN', 'uRNN']
+colours = {'tanhRNN': 'r', 'IRNN': 'pink', 'LSTM': 'g', 'complex_RNN': 'b', 'ortho_tanhRNN': 'purple', 'uRNN': 'grey'}
 
 # === grab inputs === #
 T = int(sys.argv[1])
 task = sys.argv[2]
-plot_test = sys.argv[3] == 'test'
+plot_vali = sys.argv[3] == 'vali'
 
 # === initialise === #
 if task == 'adding':
@@ -28,15 +28,15 @@ elif task == 'memory':
 else:
     sys.exit('Unknown task', task)
 
-if plot_test:
+if plot_vali:
     #   each iteration contains n_batch training examples
-    #   we get test loss after every 50 iterations
+    #   we get vali loss after every 50 iterations
     scaling_factor = 50*BATCH_SIZE
-    plot_fname = task + '_' + str(T) + '_test.png'
+    plot_fname = task + '/' + str(T) + '_vali.png'
 else:
     #   we get train loss after every iteration
     scaling_factor = BATCH_SIZE
-    plot_fname = task + '_' + str(T) + '_train.png'
+    plot_fname = task + '/' + str(T) + '_train.png'
 
 plot_fname = 'output/' + plot_fname
 print plot_fname
@@ -45,7 +45,7 @@ print plot_fname
 # (very deep dicts)
 traces = dict()
 for model in models:
-    trace_file = 'output/' + task + '_' + model + '_' + str(T) + '.trace_path.pk'
+    trace_file = 'output/' + task + '/' + model + '_' + str(T) + '.trace.pk'
     try:
         traces[model] = cPickle.load(open(trace_file))
         # check consistency
@@ -56,8 +56,8 @@ for model in models:
         print 'Missing:', trace_file
 
 # --- create plots --- #
-# test or train?
-if plot_test:
+# vali or train?
+if plot_vali:
     loss = 'test_loss'
 else:
     loss = 'train_loss'
@@ -80,7 +80,7 @@ for (model, trace) in traces.iteritems():
 xmax = scaling_factor*xmax
 print 0, xmax
 print ymin, ymax
-#ymax = 1.0
+ymax = 0.25
 #ymin = -0.001
 
 plt.axis([0, xmax, ymin, ymax])

@@ -90,7 +90,7 @@ def assign_variable(v, newv):
     return assign_opt
     
 # do everything all at once
-def update_step(cost, learning_rate=0.01, clipping=False):
+def update_step(cost, learning_rate, clipping=False):
     print 'WARNING: RMSProp does not support complex variables!'
     # TODO: add complex support to RMSProp
     # decay and momentum are copied from theano version values
@@ -107,17 +107,17 @@ def update_step(cost, learning_rate=0.01, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-def get_data(load_path, experiment, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)):
+def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)):
     """
     Either load or generate data.
     """
     if load_path == '':
-        save_path = 'input/' + experiment + '/' + str(int(time())) + '_' + str(T) + '.pk'
+        save_path = 'input/' + task + '/' + str(int(time())) + '_' + str(T) + '.pk'
         print 'No data path provided, generating and saving to', save_path
         # generate it
-        train = ExperimentData(ntrain, experiment, T)
-        vali = ExperimentData(nvali, experiment, T)
-        test = ExperimentData(ntest, experiment, T)
+        train = ExperimentData(ntrain, task, T)
+        vali = ExperimentData(nvali, task, T)
+        test = ExperimentData(ntest, task, T)
         # save it
         save_dict = {'train': train, 'vali': vali, 'test': test}
         cPickle.dump(save_dict, open(save_path, 'wb'))
@@ -130,23 +130,23 @@ def get_data(load_path, experiment, T, ntrain=int(1e5), nvali=int(1e4), ntest=in
     return train, vali, test
 
 # == and now for main == #
-def main(experiment, batch_size, state_size, T, model, data_path, gradient_clipping,
-         num_epochs=5, learning_rate=0.001, timestamp=False):
-    print 'running', experiment, 'experiment with', model
+def main(task, batch_size, state_size, T, model, data_path, gradient_clipping,
+         num_epochs=5, learning_rate=0.1, timestamp=False):
+    print 'running', task, 'task with', model
  
     # === data === #
-    train_data, vali_data, test_data = get_data(data_path, experiment, T)
+    train_data, vali_data, test_data = get_data(data_path, task, T)
     num_batches = train_data.N / batch_size
     x, y = train_data.make_placeholders() # (doesn't actually matter which one we make placeholders out of)
 
     # === set up the model === #
     sequence_length = train_data.sequence_length
     input_size = train_data.input_size
-    if experiment == 'adding':
+    if task == 'adding':
         output_size = 1
         loss_type = 'MSE'
         assert input_size == 2
-    elif experiment == 'memory':
+    elif task == 'memory':
         output_size = 9
         loss_type = 'CE'
         assert input_size == 10
@@ -156,11 +156,11 @@ def main(experiment, batch_size, state_size, T, model, data_path, gradient_clipp
                   sequence_length=sequence_length)
 
     # === logging === #
-    identifier = experiment + '_' + model + '_' + str(T)
+    identifier = model + '_' + str(T)
     if timestamp:
         identifier = identifier + '_' + str(int(time()))
     
-    best_model_path = 'output/' + identifier + '.best_model.ckpt'
+    best_model_path = 'output/' + task + '/' + identifier + '.best_model.ckpt'
     best_vali_cost = 1e6
     
     train_cost_trace = []
@@ -177,9 +177,10 @@ def main(experiment, batch_size, state_size, T, model, data_path, gradient_clipp
         nonU_variables = []
         if model == 'uRNN':
             lambdas = np.random.normal(size=(state_size*state_size))
-            U_re_name = 'RNN/uRNN/Unitary/Transition/Matrix/Real:0'
-            U_im_name = 'RNN/uRNN/Unitary/Transition/Matrix/Imaginary:0'
+            U_re_name = 'RNN/uRNN/Unitary/Transition/Real/Matrix:0'
+            U_im_name = 'RNN/uRNN/Unitary/Transition/Imaginary/Matrix:0'
             for var in tf.trainable_variables():
+                print var.name
                 if var.name == U_re_name:
                     U_re_variable = var
                 elif var.name == U_im_name:
@@ -309,8 +310,8 @@ def main(experiment, batch_size, state_size, T, model, data_path, gradient_clipp
                     # NOTE: format consistent with theano version
                     # TODO: update alongside plotting script
                     save_vals = {'train_loss': train_cost_trace,
-                                 'test_loss': vali_cost_trace,
-                                 'best_test_loss': best_vali_cost,
+                                 'vali_loss': vali_cost_trace,
+                                 'best_vali_loss': best_vali_cost,
                                  'model': model,
                                  'time_steps': T}
 
@@ -345,8 +346,8 @@ def runmo(model):
 
 
 # === parse inputs === #
-parser = argparse.ArgumentParser(description='Run experiment of long-term memory capacity of RNN.')
-parser.add_argument('--experiment', type=str, help='which experiment? adding/memory', default='adding')
+parser = argparse.ArgumentParser(description='Run task of long-term memory capacity of RNN.')
+parser.add_argument('--task', type=str, help='which task? adding/memory', default='adding')
 parser.add_argument('--batch_size', type=int, default=20)
 parser.add_argument('--state_size', type=int, help='size of internal state', default=40)
 parser.add_argument('--T', type=int, help='either memory time-scale or addition input length', default=100)
@@ -359,3 +360,10 @@ if options['model'] in {'complex_RNN', 'ortho_tanhRNN', 'uRNN'}:
     options['gradient_clipping'] = False
 else:
     options['gradient_clipping'] = True
+
+if options['data_path'] == '':
+    if options['task'] == 'adding':
+        pass
+    elif options['task'] == 'memory':
+        pass
+

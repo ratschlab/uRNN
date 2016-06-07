@@ -340,7 +340,7 @@ class tanhRNNCell(steph_RNNCell):
         """
         with vs.variable_scope(scope):
             #new_state = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition'))
-            new_state = tf.tanh(linear([inputs], self._state_size, bias=True, scope='Linear/FoldIn') + linear([state], self._state_size, bias=False, scope='Linear/Transition'))
+            new_state = tf.nn.relu(linear([inputs], self._state_size, bias=True, scope='Linear/FoldIn') + linear([state], self._state_size, bias=False, scope='Linear/Transition'))
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
@@ -404,7 +404,7 @@ class complex_RNNCell(steph_RNNCell):
         inputs_complex = tf.complex(inputs, 0)
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
-            step2 = tf.fft2d(step1, name='FFT')
+            step2 = tf.fft(step1, name='FFT')
 #            step2 = step1
             step3 = reflection(step2, self._state_size, scope='Reflection/First')
             permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
@@ -412,7 +412,7 @@ class complex_RNNCell(steph_RNNCell):
                                           trainable=False)
             step4 = tf.matmul(step3, permutation)
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-            step6 = tf.ifft2d(step5, name='InverseFFT')
+            step6 = tf.ifft(step5, name='InverseFFT')
 #            step6 = step5
             step7 = reflection(step6, self._state_size, scope='Reflection/Second')
             step8 = times_diag(step7, self._state_size, scope='Diag/Third')
@@ -429,18 +429,37 @@ class complex_RNNCell(steph_RNNCell):
         return output, new_state
 
 class uRNNCell(steph_RNNCell):
-    def __call__(self, inputs, state, scope='uRNN'):
+    def __call__(self, inputs, state, scope='uRNN', split=True):
         """
         this unitary RNN shall be my one, once I figure it out I guess
         ... fun times ahead
+
+        split produces some different behaviour... if split, real/imag parameters are separate
         """
         # TODO: think about outputs
-        # grr, so much splitting into real and imag
         inputs_complex = tf.complex(inputs, 0)
         with vs.variable_scope(scope):
-            # probably using sigmoid?
-            new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
-            output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
-            # for now, output is modulus...
-            output = tf.sqrt(tf.real(output)**2 + tf.imag(output)**2)
+            if split:
+                # transform the hidden state
+                # these are possibly non-differentiable in tf, need to test :/
+                state_re = tf.real(state)
+                state_im = tf.imag(state)
+                Ustate = tf.complex(linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real'), linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary'))
+                # now as in the complex_RNN case
+                # (folding in the input data) 
+                foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
+                foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
+
+                intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + Ustate
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+
+                real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
+                output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+            else:
+                raise NotImplementedError
+                # probably using sigmoid?
+                new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
+                output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
+                # for now, output is modulus...
+                output = tf.sqrt(tf.real(output)**2 + tf.imag(output)**2)
         return output, new_state
