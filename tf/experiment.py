@@ -131,7 +131,7 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
 
 # == and now for main == #
 def main(task, batch_size, state_size, T, model, data_path, gradient_clipping,
-         num_epochs=5, learning_rate=0.1, timestamp=False):
+        learning_rate, num_epochs, timestamp=False):
     print 'running', task, 'task with', model
  
     # === data === #
@@ -242,7 +242,7 @@ def main(task, batch_size, state_size, T, model, data_path, gradient_clipping,
                     # extract dcost/dU terms from tf
                     dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
                     # calculate gradients of lambdas using eigenvalue decomposition trick
-                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, speedy=True)
+                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
                     # calculate train cost, update variables
                     train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
                 elif model == 'ortho_tanhRNN':
@@ -250,7 +250,7 @@ def main(task, batch_size, state_size, T, model, data_path, gradient_clipping,
                     dcost_dU_re = session.run(g_and_v_U[0][0], {x:batch_x, y:batch_y})
                     dcost_dU_im = np.zeros_like(dcost_dU_re)
                     # calculate gradients of lambdas using eigenvalue decomposition trick
-                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, speedy=True)
+                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
                     assert np.array_equal(U_new_im_array, np.zeros_like(U_new_im_array))
                     # calculate train cost, update variables
                     train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
@@ -347,12 +347,22 @@ def runmo(model):
 
 # === parse inputs === #
 parser = argparse.ArgumentParser(description='Run task of long-term memory capacity of RNN.')
-parser.add_argument('--task', type=str, help='which task? adding/memory', default='adding')
-parser.add_argument('--batch_size', type=int, default=20)
-parser.add_argument('--state_size', type=int, help='size of internal state', default=40)
-parser.add_argument('--T', type=int, help='either memory time-scale or addition input length', default=100)
-parser.add_argument('--model', type=str, help='which RNN model to use?', default='tanhRNN')
-parser.add_argument('--data_path', type=str, help='path to dict of ExperimentData objects (if empty, generate data)', default='')
+parser.add_argument('--task', type=str, help='which task? adding/memory', 
+                    default='adding')
+parser.add_argument('--batch_size', type=int, 
+                    default=20)
+parser.add_argument('--state_size', type=int, help='size of internal state', 
+                    default=40)
+parser.add_argument('--T', type=int, help='memory time-scale or addition input length', 
+                    default=100)
+parser.add_argument('--model', type=str, help='which RNN model to use?', 
+                    default='tanhRNN')
+parser.add_argument('--data_path', type=str, help='path to dict of ExperimentData objects (if empty, generate data)', 
+                    default='')
+parser.add_argument('--learning_rate', type=float, help='prefactor of gradient in gradient descent parameter update', 
+                    default=0.0001)
+parser.add_argument('--num_epochs', type=int, help='number of times to run through training data', 
+                    default=5)
 options = vars(parser.parse_args())
 
 # === derivative options === #
@@ -361,9 +371,9 @@ if options['model'] in {'complex_RNN', 'ortho_tanhRNN', 'uRNN'}:
 else:
     options['gradient_clipping'] = True
 
-if options['data_path'] == '':
+if options['data_path'] == '' and options['T']== 100:
     if options['task'] == 'adding':
-        pass
+        options['data_path'] = '/tf_data/input/adding/1465289739_100.pk'
     elif options['task'] == 'memory':
         pass
 
