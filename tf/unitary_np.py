@@ -302,8 +302,8 @@ def numerical_partial_gradient(e, L, n, U, dcost_dU_re, dcost_dU_im, EPSILON):
     delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
     return delta
 
-def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, 
-                          EPSILON=1e-5, learning_rate=0.01):
+def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
+                          EPSILON=1e-5):
     """
     Given dcost/dU, get dcost/dlambdas
     Using... numerical differentiation. :(
@@ -330,8 +330,8 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas,
 
     return np.real(U_new), np.imag(U_new), dlambdas
 
-def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, 
-                           learning_rate=0.01, speedy=False):
+def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, 
+                         speedy=False):
     """
     Given dcost/dU, get dcost/dlambdas
     Using... linear algebra!
