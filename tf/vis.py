@@ -12,13 +12,16 @@ plt.clf()
 
 # === constants === #
 BATCH_SIZE = 20
-models = ['tanhRNN', 'IRNN', 'LSTM', 'complex_RNN', 'ortho_tanhRNN', 'uRNN']
-colours = {'tanhRNN': 'r', 'IRNN': 'pink', 'LSTM': 'g', 'complex_RNN': 'b', 'ortho_tanhRNN': 'purple', 'uRNN': 'grey'}
+models = ['tanhRNN', 'IRNN', 'LSTM', 'complex_RNN', 'ortho20_tanhRNN', 'ortho_tanhRNN', 'uRNN']
+colours = {'tanhRNN': 'r', 'IRNN': 'pink', 'LSTM': 'g', 'complex_RNN': 'b', 'ortho_tanhRNN': 'purple', 'uRNN': 'grey', 'ortho20_tanhRNN': 'orange'}
 
 # === grab inputs === #
-T = int(sys.argv[1])
-task = sys.argv[2]
-plot_vali = sys.argv[3] == 'vali'
+#T = int(sys.argv[1])
+#task = sys.argv[2]
+#plot_vali = sys.argv[3] == 'vali'
+T = 100
+task = 'adding'
+plot_vali = sys.argv[1] == 'vali'
 
 # === initialise === #
 if task == 'adding':
@@ -50,7 +53,7 @@ for model in models:
         traces[model] = cPickle.load(open(trace_file))
         # check consistency
         assert traces[model]['time_steps'] == T
-        assert traces[model]['model'] == model
+#        assert traces[model]['model'] == model
         print 'Loaded', trace_file
     except IOError:
         print 'Missing:', trace_file
@@ -58,7 +61,7 @@ for model in models:
 # --- create plots --- #
 # vali or train?
 if plot_vali:
-    loss = 'test_loss'
+    loss = 'vali_loss'
 else:
     loss = 'train_loss'
 
@@ -78,10 +81,11 @@ for (model, trace) in traces.iteritems():
         ymin = train_min
 
 xmax = scaling_factor*xmax
+#xmax = 10000
+ymax = 0.25
 print 0, xmax
 print ymin, ymax
-ymax = 0.25
-#ymin = -0.001
+ymin = -0.001
 
 plt.axis([0, xmax, ymin, ymax])
 # construct the arguments to plot
