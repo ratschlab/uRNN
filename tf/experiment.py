@@ -100,7 +100,7 @@ def update_step(cost, learning_rate, clipping=False):
     print 'By the way, the gradients of cost',
     print 'are with respect to the following Variables:'
     for var in tf.trainable_variables():
-        print var.name, var.dtype
+        print var.name, var.dtype, var.get_shape()
     g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
@@ -130,8 +130,8 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
     return train, vali, test
 
 # == and now for main == #
-def main(task, batch_size, state_size, T, model, data_path, gradient_clipping,
-        learning_rate, num_epochs, timestamp=False):
+def run_experiment(task, batch_size, state_size, T, model, data_path, 
+                  gradient_clipping, learning_rate, num_epochs, timestamp=False):
     print 'running', task, 'task with', model
  
     # === data === #
@@ -165,9 +165,9 @@ def main(task, batch_size, state_size, T, model, data_path, gradient_clipping,
     
     train_cost_trace = []
     vali_cost_trace = []
-    trace_path = 'output/' + identifier + '.trace.pk'
+    trace_path = 'output/' + task + '/' + identifier + '.trace.pk'
 
-    hidden_gradients_path = 'output/' + identifier + '.hidden_gradients.pk' #TODO: internal monitoring
+    hidden_gradients_path = 'output/' + task + '/' + identifier + '.hidden_gradients.pk' #TODO: internal monitoring
 
     # === ops for training === #
     cost = get_cost(outputs, y, loss_type)
@@ -360,7 +360,7 @@ parser.add_argument('--model', type=str, help='which RNN model to use?',
 parser.add_argument('--data_path', type=str, help='path to dict of ExperimentData objects (if empty, generate data)', 
                     default='')
 parser.add_argument('--learning_rate', type=float, help='prefactor of gradient in gradient descent parameter update', 
-                    default=0.0001)
+                    default=0.001)
 parser.add_argument('--num_epochs', type=int, help='number of times to run through training data', 
                     default=5)
 options = vars(parser.parse_args())
@@ -376,4 +376,18 @@ if options['data_path'] == '' and options['T']== 100:
         options['data_path'] = '/tf_data/input/adding/1465289739_100.pk'
     elif options['task'] == 'memory':
         pass
+
+# === suggestions (param values from paper) === #
+print 'Suggested state sizes:'
+if options['task'] == 'adding':
+    print 'tanhRNN:\t80'
+    print 'IRNN:\t\t80'
+    print 'LSTM:\t\t40'
+    print 'complex_RNN:\t128'
+    print 'ortho_tanhRHH:\t20, 64'
+elif options['task'] == 'memory':
+    print 'tanhRNN:\t128'
+    print 'IRNN:\t\t128'
+    print 'LSTM:\t\t128'
+    print 'complex_RNN:\t512'
 
