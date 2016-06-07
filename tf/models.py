@@ -11,8 +11,12 @@ import tensorflow as tf
 import numpy as np
 import pdb
 
-from tensorflow.models.rnn import rnn
-from tensorflow.models.rnn.rnn_cell import RNNCell
+# tf 0.9
+#from tf.nn.rnn_cell import RNNCell
+
+# tf 0.7
+#from tensorflow.models.rnn import rnn
+#from tensorflow.models.rnn.rnn_cell import RNNCell
 from tensorflow.python.ops import variable_scope as vs
 
 from unitary import unitary
@@ -106,7 +110,7 @@ def relu_mod(state, scope=None):
                                     initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(state_size)), 
                                                             dtype=tf.float32, 
                                                             shape=[state_size]))
-        rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0)
+        rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0.0)
     return state * rescale
 
 def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
@@ -174,7 +178,7 @@ def linear(args, output_size, bias, bias_start=0.0,
     Raises:
         ValueError: if some of the arguments has unspecified or wrong shape.
   """
-    assert args
+    assert args is not None
     if not isinstance(args, (list, tuple)):
         args = [args]
 
@@ -270,12 +274,16 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     # split up the input so the RNN can accept it...
     inputs = [tf.squeeze(input_, [1])
             for input_ in tf.split(1, sequence_length, x)]
-    outputs, final_state = rnn.rnn(cell, inputs, initial_state=state_0)
+    # tf 0.7.0
+#    outputs, final_state = rnn.rnn(cell, inputs, initial_state=state_0)
+    # tf 0.9.0
+    outputs, final_state = tf.nn.rnn(cell, inputs, initial_state=state_0)
     return outputs
 
 # === cells ! === #
 # TODO: better name for this abstract class
-class steph_RNNCell(RNNCell):
+#class steph_RNNCell(RNNCell):      # tf 0.7.0
+class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
     def __init__(self, input_size, state_size, output_size, state_dtype):
         self._input_size = input_size
         self._state_size = state_size
@@ -401,14 +409,14 @@ class complex_RNNCell(steph_RNNCell):
         """
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
-        inputs_complex = tf.complex(inputs, 0)
+        inputs_complex = tf.complex(inputs, 0.0)          # tf 0.9.0
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
             step2 = tf.fft(step1, name='FFT')
 #            step2 = step1
             step3 = reflection(step2, self._state_size, scope='Reflection/First')
             permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
-                                          initializer=tf.complex(np.random.permutation(np.eye(self._state_size)), 0),
+                                          initializer=tf.complex(np.random.permutation(np.eye(self._state_size, dtype=np.float32)), tf.constant(0.0, dtype=tf.float32)),
                                           trainable=False)
             step4 = tf.matmul(step3, permutation)
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
@@ -437,7 +445,7 @@ class uRNNCell(steph_RNNCell):
         split produces some different behaviour... if split, real/imag parameters are separate
         """
         # TODO: think about outputs
-        inputs_complex = tf.complex(inputs, 0)
+        inputs_complex = tf.complex(inputs, 0.0)
         with vs.variable_scope(scope):
             if split:
                 # transform the hidden state
