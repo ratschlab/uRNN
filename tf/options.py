@@ -23,7 +23,7 @@ def trivial_loss(parameters, batch):
 
     y_hat = x + parameters
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 def free_matrix_loss(parameters, batch):
@@ -39,7 +39,7 @@ def free_matrix_loss(parameters, batch):
     y_hat = np.dot(x, M)
 
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 # === parametrisation-specific functions === #
@@ -144,7 +144,7 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     # === now calculate the loss ... === #
     y_hat = step8
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 def complex_RNN_multiloss(parameters, permutations, batch):
@@ -189,7 +189,7 @@ def general_unitary_loss(parameters, batch, basis_change=None, real=False):
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
 
     return loss
 
