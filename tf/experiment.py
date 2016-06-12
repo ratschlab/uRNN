@@ -101,6 +101,10 @@ def update_step(cost, learning_rate, clipping=False):
     print 'are with respect to the following Variables:'
     for var in tf.trainable_variables():
         print var.name, var.dtype, var.get_shape()
+    # tolo
+    vv = tf.trainable_variables()
+    pdb.set_trace()
+    # endtolo
     g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
@@ -132,7 +136,7 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
 # == and now for main == #
 def run_experiment(task, batch_size, state_size, T, model, data_path, 
                   gradient_clipping, learning_rate, num_epochs, timestamp=False):
-    print 'running', task, 'task with', model
+    print 'running', task, 'task with', model, 'and state size', state_size
  
     # === data === #
     train_data, vali_data, test_data = get_data(data_path, task, T)
@@ -219,7 +223,6 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     else:
         # nothing special here, movin' along...
         train_op = update_step(cost, learning_rate, gradient_clipping)
-
    
     # === for checkpointing the model === #
     saver = tf.train.Saver()        # for checkpointing the model
@@ -293,7 +296,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                 # DETEST
 
                 train_cost_trace.append(train_cost)
-                print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
+                if np.random.random() < 0.2:
+                    print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
 
                 if batch_index % 50 == 0:
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
@@ -313,7 +317,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                                  'vali_loss': vali_cost_trace,
                                  'best_vali_loss': best_vali_cost,
                                  'model': model,
-                                 'time_steps': T}
+                                 'time_steps': T,
+                                 'batch_size': batch_size}
 
                     cPickle.dump(save_vals, file(trace_path, 'wb'),
                                  cPickle.HIGHEST_PROTOCOL)
