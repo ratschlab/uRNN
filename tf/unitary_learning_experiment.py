@@ -30,7 +30,7 @@ from scipy.linalg import eigh
 
 # === some globals === #
 MEASURE_SKIP = 250
-NUM_WORKERS = 32
+NUM_WORKERS = 30
 
 # === utility functions === #
 def numerical_partial_gradient(i, n, loss_function, old_loss, parameters, 
@@ -248,7 +248,7 @@ def lstsq_baseline(train_batches, test_batch):
 
 def logging(d, noise, batch_size, n_batches, start_from_rep, identifier=None):
     if identifier is None:
-        logging_path = 'output/simple/fft1_d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
+        logging_path = 'output/simple/d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
     else:
         assert type(identifier) == str
         logging_path = 'output/simple/'+identifier+'_d'+str(d) + '_noise'+str(noise) + '_bn'+str(batch_size) + '_nb' + str(n_batches)
