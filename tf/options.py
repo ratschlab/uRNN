@@ -9,7 +9,7 @@
 # ------------------------------------------
 
 import numpy as np
-from unitary_np import unitary_matrix
+from unitary_np import unitary_matrix, complex_reflection
 from scipy.fftpack import fft, ifft
 from functools import partial
 
@@ -44,60 +44,6 @@ def free_matrix_loss(parameters, batch):
 
 # === parametrisation-specific functions === #
 
-def do_reflection(x, v_re, v_im, theano_reflection=False):
-    """
-    Hey, it's this function again! Woo!
-    NOTE/WARNING: theano_reflection gives a DIFFERENT RESULT to the other one...
-    see this unresolved issue:
-    https://github.com/amarshah/complex_RNN/issues/2
-    """
-    if theano_reflection:
-        # (mostly copypasta from theano, with T replaced by np all over)
-        # FOR NOW OK
-        input_re = np.real(x)
-        # alpha
-        input_im = np.imag(x)
-        # beta
-        reflect_re = v_re
-        # mu
-        reflect_im = v_im
-        # nu
-
-        vstarv = (reflect_re**2 + reflect_im**2).sum()
-
-        # (the following things are roughly scalars)
-        # (they actually are as long as the batch size, e.g. input[0])
-        input_re_reflect_re = np.dot(input_re, reflect_re)
-        # αμ
-        input_re_reflect_im = np.dot(input_re, reflect_im)
-        # αν
-        input_im_reflect_re = np.dot(input_im, reflect_re)
-        # βμ
-        input_im_reflect_im = np.dot(input_im, reflect_im)
-        # βν
-
-        a = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
-        # outer(αμ - βν, mu)
-        b = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
-        # outer(αν + βμ, nu)
-        c = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_im)
-        # outer(αμ - βν, nu)
-        d = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_re)
-        # outer(αν + βμ, mu)
-
-        output_re = input_re - 2. / vstarv * (d - c)
-        output_im = input_im - 2. / vstarv * (a + b)
-
-        output = output_re + 1j*output_im
-    else:
-        # do it the 'old fashioned' way
-        v = v_re + 1j*v_im
-        # aka https://en.wikipedia.org/wiki/Reflection_%28mathematics%29#Reflection_through_a_hyperplane_in_n_dimensions
-        # but with conj v dot with x
-        output = x - (2.0/np.dot(v, np.conj(v))) * np.outer(np.dot(x, np.conj(v)), v)
-
-    return output
-
 def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     """
     Transform data according to the complex_RNN transformations.
@@ -131,12 +77,12 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     # === do the transformation === #
     step1 = np.dot(x, diag1)
     step2 = fft(step1)
-    step3 = do_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
+    step3 = complex_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
     #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
     step6 = ifft(step5)
-    step7 = do_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
+    step7 = complex_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
     #step7 = step6
     step8 = np.dot(step7, diag3)
     # POSSIBLY do relu_mod...

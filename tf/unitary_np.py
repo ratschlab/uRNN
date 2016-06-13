@@ -16,6 +16,62 @@ from scipy.fftpack import fft, ifft
 
 from functools import partial
 
+# === generic unitary === #
+def complex_reflection(x, v_re, v_im, theano_reflection=False):
+    """
+    Hey, it's this function again! Woo!
+    NOTE/WARNING: theano_reflection gives a DIFFERENT RESULT to the other one...
+    see this unresolved issue:
+    https://github.com/amarshah/complex_RNN/issues/2
+    """
+    if theano_reflection:
+        # (mostly copypasta from theano, with T replaced by np all over)
+        # FOR NOW OK
+        input_re = np.real(x)
+        # alpha
+        input_im = np.imag(x)
+        # beta
+        reflect_re = v_re
+        # mu
+        reflect_im = v_im
+        # nu
+
+        vstarv = (reflect_re**2 + reflect_im**2).sum()
+
+        # (the following things are roughly scalars)
+        # (they actually are as long as the batch size, e.g. input[0])
+        input_re_reflect_re = np.dot(input_re, reflect_re)
+        # αμ
+        input_re_reflect_im = np.dot(input_re, reflect_im)
+        # αν
+        input_im_reflect_re = np.dot(input_im, reflect_re)
+        # βμ
+        input_im_reflect_im = np.dot(input_im, reflect_im)
+        # βν
+
+        a = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
+        # outer(αμ - βν, mu)
+        b = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
+        # outer(αν + βμ, nu)
+        c = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_im)
+        # outer(αμ - βν, nu)
+        d = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_re)
+        # outer(αν + βμ, mu)
+
+        output_re = input_re - 2. / vstarv * (d - c)
+        output_im = input_im - 2. / vstarv * (a + b)
+
+        output = output_re + 1j*output_im
+    else:
+        # do it the 'old fashioned' way
+        v = v_re + 1j*v_im
+        # aka https://en.wikipedia.org/wiki/Reflection_%28mathematics%29#Reflection_through_a_hyperplane_in_n_dimensions
+        # but with conj v dot with x
+        output = x - (2.0/np.dot(v, np.conj(v))) * np.outer(np.dot(x, np.conj(v)), v)
+
+    return output
+
+# === lie algebra === #
 def lie_algebra_element(n, lambdas, check_skew_hermitian=False, check_real=False):
     """
     Explicitly construct an element of a Lie algebra, assuming 'default' basis,
@@ -177,13 +233,17 @@ def random_unitary_composition(n):
     
     ... skipping reflection because tired TODO fix
     """
+    # arjovsky things
+    scale = np.sqrt(6.0/ ( 2 + d*2))
     # diag
     thetas1 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
     diag1 = np.diag(np.cos(thetas1) + 1j*np.sin(thetas1))
     # fft
     step2 = fft(diag1)
-    # skipping reflection
-    step3 = step2
+    # reflection
+    v1_re = np.random.uniform(low=-scale, high=scale, size=d)
+    v1_im = np.random.uniform(low=-scale, high=scale, size=d)
+    step3 = complex_reflection(step2, v1_re, v1_im, theano_reflection=False)
     # permutation
     permutation = np.random.permutation(np.eye(n))
     step4 = np.dot(step3, permutation)
@@ -193,8 +253,10 @@ def random_unitary_composition(n):
     step5 = np.dot(step4, diag2)
     # ifft
     step6 = ifft(step5)
-    # skipping reflection
-    step7 = step6
+    # reflection
+    v2_re = np.random.uniform(low=-scale, high=scale, size=d)
+    v2_im = np.random.uniform(low=-scale, high=scale, size=d)
+    step7 = complex_reflection(step6, v2_re, v2_im, theano_reflection=False)
     # final diag
     thetas3 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
     diag3 = np.diag(np.cos(thetas3) + 1j*np.sin(thetas3))
