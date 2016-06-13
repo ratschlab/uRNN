@@ -393,6 +393,34 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
 
     return np.real(U_new), np.imag(U_new), dlambdas
 
+def eigtrick_speedy(n, w, expw, v, vdag, lambdas):
+    one = np.ones([n, n])
+    M = (expw*one - (expw*one).T)/(w*one - (w*one).T)
+    M[xrange(n), xrange(n)] = expw
+    dU_dlambdas = np.zeros(shape=(len(lambdas), n, n), dtype=complex)
+    lambda_index = 0
+    for r in xrange(n):
+        for s in xrange(n):
+            if r > s:
+                # real asymmetric case
+                WTW = np.outer(vdag[:, r], v[s, :]) - np.outer(vdag[:, s], v[r, :])
+            else:
+                if len(lambdas) == n*(n-1)/2:
+                    # ditch it all
+                    continue
+                elif r == s:
+                    # imag diag case
+                    WTW = 1j*np.outer(vdag[:, r], v[r, :])
+                else:
+                    # imag symmetric
+                    WTW = 1j*(np.outer(vdag[:, s], v[r, :]) + np.outer(vdag[:, r], v[s, :]))
+            V = WTW*M
+            dU_dlambda = np.dot(np.dot(v, V), vdag)
+            dU_dlambdas[lambda_index, :] = dU_dlambda
+            lambda_index += 1
+    return dU_dlambdas
+
+
 def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, 
                          speedy=False):
     """
