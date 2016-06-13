@@ -123,7 +123,7 @@ def complex_RNN_multiloss(parameters, permutations, batch):
     
     
 
-def general_unitary_loss(parameters, batch, basis_change=None, real=False
+def general_unitary_loss(parameters, batch, basis_change=None, real=False,
                          return_gradient=False):
     """
     Hey, it's my one! Rendered very simple by existence of helper functions. :)
