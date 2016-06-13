@@ -177,7 +177,7 @@ def random_baseline(test_batch, method, real=False):
     M = unitary_matrix(d, method=method, real=real)
     y_hat = np.dot(x, M)
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 def true_baseline(U, test_batch):
@@ -187,9 +187,32 @@ def true_baseline(U, test_batch):
     x, y = test_batch
     
     y_hat = np.dot(x, U.T)
-    differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
+
+def lstsq_baseline(train_batches, test_batch):
+    """
+    Solve the problem using least squares (computationally intensive!)
+    """
+    n_batches = len(train_batches)
+    batch_size = train_batches[0][0].shape[0]
+    d = test_batch[0].shape[1]
+    n = n_batches * batch_size
+    X = np.empty(shape=(n, d), dtype=complex)
+    Y = np.empty(shape=(n, d), dtype=complex)
+    for (i, batch) in enumerate(train_batches):
+        X[i*batch_size:(i+1)*batch_size, :] = batch[0]
+        Y[i*batch_size:(i+1)*batch_size, :] = batch[1]
+
+    # now solve
+    Uhat, residuals, rank, s = np.linalg.lstsq(X, Y)
+
+    # now predict
+    X_test, Y_test = test_batch
+    Y_hat = np.dot(X_test, Uhat)
+    loss = np.mean(np.square(np.linalg.norm(Y_hat - Y_test, axis=1)))
+    return loss
+
 
 def logging(d, noise, batch_size, n_batches, start_from_rep, identifier=None):
     if identifier is None:
@@ -295,9 +318,11 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         if not method == 'composition':
             random_re_test_loss = random_baseline(test_batch, method=method, real=True)
         true_test_loss = true_baseline(U, test_batch)
+        lstsq_test_loss = lstsq_baseline(train_batches, test_batch)
         baselines = {'random_unitary': random_test_loss,
                      'random_orthogonal': random_re_test_loss,
-                     'true': true_test_loss}
+                     'true': true_test_loss,
+                     'lstsq': lstsq_test_loss}
         for (name, loss) in baselines.iteritems():
             R_test.write(name + ' ' + str(loss) + ' ' + str(rep) + ' ' + loginfo['method'] +'\n')
         R_test.flush()
