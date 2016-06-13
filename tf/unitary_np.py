@@ -393,7 +393,9 @@ def numgrad_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
 
     return np.real(U_new), np.imag(U_new), dlambdas
 
-def eigtrick_speedy(n, w, expw, v, vdag, lambdas):
+def eigtrick_speedy(n, w, expw, v, vdag, lambdas, learnable_parameters=None):
+    if learnable_parameters is None:
+        learnable_parameters = xrange(len(lambdas))
     one = np.ones([n, n])
     M = (expw*one - (expw*one).T)/(w*one - (w*one).T)
     M[xrange(n), xrange(n)] = expw
@@ -416,7 +418,9 @@ def eigtrick_speedy(n, w, expw, v, vdag, lambdas):
                     WTW = 1j*(np.outer(vdag[:, s], v[r, :]) + np.outer(vdag[:, r], v[s, :]))
             V = WTW*M
             dU_dlambda = np.dot(np.dot(v, V), vdag)
-            dU_dlambdas[lambda_index, :] = dU_dlambda
+            if lambda_index in learnable_parameters:
+                # this definitely isn't the most efficient way to do this
+                dU_dlambdas[lambda_index, :] = dU_dlambda
             lambda_index += 1
     return dU_dlambdas
 
