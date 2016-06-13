@@ -1,4 +1,5 @@
 #!/usr/bin/env ipython
+# -*- coding: utf-8 -*-
 #
 # Functions pertaining to the unitary group and its associated Lie algebra.
 # (RETURN NP OBJECTS)
@@ -234,15 +235,15 @@ def random_unitary_composition(n):
     ... skipping reflection because tired TODO fix
     """
     # arjovsky things
-    scale = np.sqrt(6.0/ ( 2 + d*2))
+    scale = np.sqrt(6.0/ ( 2 + n*2))
     # diag
     thetas1 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
     diag1 = np.diag(np.cos(thetas1) + 1j*np.sin(thetas1))
     # fft
     step2 = fft(diag1)
     # reflection
-    v1_re = np.random.uniform(low=-scale, high=scale, size=d)
-    v1_im = np.random.uniform(low=-scale, high=scale, size=d)
+    v1_re = np.random.uniform(low=-scale, high=scale, size=n)
+    v1_im = np.random.uniform(low=-scale, high=scale, size=n)
     step3 = complex_reflection(step2, v1_re, v1_im, theano_reflection=False)
     # permutation
     permutation = np.random.permutation(np.eye(n))
@@ -254,8 +255,8 @@ def random_unitary_composition(n):
     # ifft
     step6 = ifft(step5)
     # reflection
-    v2_re = np.random.uniform(low=-scale, high=scale, size=d)
-    v2_im = np.random.uniform(low=-scale, high=scale, size=d)
+    v2_re = np.random.uniform(low=-scale, high=scale, size=n)
+    v2_im = np.random.uniform(low=-scale, high=scale, size=n)
     step7 = complex_reflection(step6, v2_re, v2_im, theano_reflection=False)
     # final diag
     thetas3 = np.random.uniform(low=-np.pi, high=np.pi, size=n)
