@@ -123,21 +123,28 @@ def complex_RNN_multiloss(parameters, permutations, batch):
     
     
 
-def general_unitary_loss(parameters, batch, basis_change=None, real=False):
+def general_unitary_loss(parameters, batch, basis_change=None, real=False
+                         return_gradient=False):
     """
     Hey, it's my one! Rendered very simple by existence of helper functions. :)
     """
     x, y = batch
     d = x.shape[1]
+    batch_size = x.shape[0]
 
     lambdas = parameters
     U = unitary_matrix(d, lambdas=lambdas, basis_change=basis_change, real=real)
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
-    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
-
-    return loss
+    if not return_gradient:
+        loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
+        return loss
+    else:
+        loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
+        dloss_dUre = 2.0/batch_size * np.einsum('ij,ik', differences, x)
+        dloss_dUim = 1j*dloss_dUre
+        return loss, dloss_dUre, dloss_dUim
 
 # === experiment class === #
 class Experiment(object):
