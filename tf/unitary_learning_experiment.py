@@ -19,12 +19,14 @@ import sys
 import time
 
 from data import generate_unitary_learning, create_batches
-from unitary_np import unitary_matrix, project_to_unitary
+from unitary_np import unitary_matrix, project_to_unitary, lie_algebra_element, eigtrick_speedy
 from functools import partial
 from multiprocessing import Pool
 from random import sample
 
 from options import presets
+
+from scipy.linalg import eigh
 
 # === some globals === #
 MEASURE_SKIP = 250
@@ -62,6 +64,33 @@ def numerical_random_gradient(i, learnable_parameters, n, loss_function,
     gradient_vector = np.zeros(n)
     gradient_vector[learnable_parameters] = difference*random_direction
     return gradient_vector
+
+def analytical_gradient(loss_function, parameters, batch, update_indices=None):
+    # TODO: Fix (this gives different results to doing it numerically..)
+    # I suspect the way I'm reintegrating the loss is incorrect, which would mean
+    # the way I'm doing it for the RNN is also incorrect, and should fix tht
+    # gonna be real embarrassing when/if I figure it out, mark my words python interpreter
+    raise NotImplementedError
+    if update_indices is None:
+        update_indices = xrange(len(parameters))
+    # ~~~ assuming general_unitary is going on here ~~~
+    # get dcost/du_re and dcost/du_im
+    original_loss, dcost_dUre, dcost_dUim = loss_function(parameters, batch, return_gradient=True)
+    # now get the rest of it (eigtrick)
+    n = batch[0].shape[1]
+    L = lie_algebra_element(n, parameters).T
+    w, v = eigh(1j*L)
+    w = -1j*w
+    vdag = np.conj(v.T)
+    expw = np.exp(w)
+    dU_dlambdas = eigtrick_speedy(n, w, expw, v, vdag, parameters)
+    # run through learnable parameters
+    d_params = np.zeros_like(parameters)
+    for i in update_indices:
+        dU_dlambda = dU_dlambdas[i]
+        delta = np.trace(np.dot(dcost_dUre.T, np.real(dU_dlambda)) + np.dot(dcost_dUim.T, np.imag(dU_dlambda)))
+        d_params[i] = delta
+    return original_loss, d_params
 
 def numerical_gradient(loss_function, parameters, batch, pool, 
                        random_projections=0, update_indices=None):
@@ -133,10 +162,13 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
     exp_name = experiment.name
 
     for (i, batch) in enumerate(train_batches):
-        loss, d_params = numerical_gradient(loss_function, parameters, batch, pool,
-                                            random_projections=experiment.random_projections,
-                                            update_indices=experiment.learnable_parameters)
-
+        if 'NOPE NOT YET TODO' in exp_name:
+            loss, d_params = analytical_gradient(loss_function, parameters, batch,
+                                                update_indices=experiment.learnable_parameters)
+        else:
+            loss, d_params = numerical_gradient(loss_function, parameters, batch, pool,
+                                                random_projections=experiment.random_projections,
+                                                update_indices=experiment.learnable_parameters)
 
         # === record
         batch_size = batch[0].shape[0]
