@@ -12,6 +12,8 @@ import numpy as np
 from unitary_np import unitary_matrix, complex_reflection
 from scipy.fftpack import fft, ifft
 from functools import partial
+import pdb
+from copy import deepcopy
 
 # === loss functions === #
 def trivial_loss(parameters, batch):
@@ -137,13 +139,14 @@ def general_unitary_loss(parameters, batch, basis_change=None, real=False,
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     if not return_gradient:
-        loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
         return loss
     else:
-        loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
-        dloss_dUre = 2.0/batch_size * np.einsum('ij,ik', differences, x)
-        dloss_dUim = 1j*dloss_dUre
+        d_xs = np.einsum('ij, ik', differences, np.conj(x))
+        ds_x = np.einsum('ij, ik', np.conj(differences), x) 
+        dloss_dUre = 1.0/batch_size * (d_xs + ds_x)
+        dloss_dUim = 1j*1.0/batch_size * (-d_xs + ds_x)
         return loss, dloss_dUre, dloss_dUim
 
 # === experiment class === #
@@ -333,6 +336,23 @@ def rerun(d):
     if d > 7:
         general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=True)
         exp_list.append(general_restricted)
+    return exp_list
+
+def basis_test(d):
+    """
+        self.learning_rate = 0.001
+        and testing with learning rate...
+    """
+    lr = 1e-3
+    general = Experiment('general_unitary_lr'+str(lr), d)
+    general.learning_rate = lr
+    exp_list = [general]
+    for basis_change in [2, 5, 10]:
+        lr_adj = lr/basis_change
+        gen_nobasis = Experiment('general_unitary_lr'+str(lr_adj), d)
+        gen_basis = Experiment('general_unitary_basis_lr'+str(lr_adj), d, change_of_basis=basis_change)
+        exp_list.append(gen_nobasis)
+        exp_list.append(gen_basis)
     return exp_list
 
 # === more experiments 1/6/16 === #
