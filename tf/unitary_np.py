@@ -466,7 +466,7 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
                     V[s, r] = (expw[s] - expw[r])*G[s, r]/(w[s] - w[r])
             grad = np.dot(np.dot(v, V), vdag)
             dU_dlambda = grad
-            delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+            delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
             dlambdas[i] = delta
     else:
         # woooo
@@ -479,7 +479,7 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
             for s in xrange(n):
                 if r > s:
                     # real asymmetric case
-                    WTW = np.outer(vdag[:, r], v[s, :]) - np.outer(vdag[:, s], v[r, :])
+                    WTW = - np.outer(vdag[:, r], v[s, :]) + np.outer(vdag[:, s], v[r, :])
                 else:
                     if len(lambdas) == n*(n-1)/2:
                         # ditch it all
