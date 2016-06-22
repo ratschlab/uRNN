@@ -31,6 +31,7 @@ from scipy.linalg import eigh
 # === some globals === #
 MEASURE_SKIP = 250
 NUM_WORKERS = 30
+NUMGRAD = True
 
 # === utility functions === #
 def numerical_partial_gradient(i, n, loss_function, old_loss, parameters, 
@@ -66,11 +67,6 @@ def numerical_random_gradient(i, learnable_parameters, n, loss_function,
     return gradient_vector
 
 def analytical_gradient(loss_function, parameters, batch, update_indices=None):
-    # TODO: Fix (this gives different results to doing it numerically..)
-    # I suspect the way I'm reintegrating the loss is incorrect, which would mean
-    # the way I'm doing it for the RNN is also incorrect, and should fix tht
-    # gonna be real embarrassing when/if I figure it out, mark my words python interpreter
-    raise NotImplementedError
     if update_indices is None:
         update_indices = xrange(len(parameters))
     # ~~~ assuming general_unitary is going on here ~~~
@@ -88,7 +84,7 @@ def analytical_gradient(loss_function, parameters, batch, update_indices=None):
     d_params = np.zeros_like(parameters)
     for i in update_indices:
         dU_dlambda = dU_dlambdas[i]
-        delta = np.trace(np.dot(dcost_dUre.T, np.real(dU_dlambda)) + np.dot(dcost_dUim.T, np.imag(dU_dlambda)))
+        delta = np.trace(np.dot(dcost_dUre, np.real(dU_dlambda)) + np.dot(dcost_dUim, np.imag(dU_dlambda)))
         d_params[i] = delta
     return original_loss, d_params
 
@@ -162,14 +158,13 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
     exp_name = experiment.name
 
     for (i, batch) in enumerate(train_batches):
-        if 'NOPE NOT YET TODO' in exp_name:
+        if 'general_unitary' in exp_name and not NUMGRAD:
             loss, d_params = analytical_gradient(loss_function, parameters, batch,
                                                 update_indices=experiment.learnable_parameters)
         else:
             loss, d_params = numerical_gradient(loss_function, parameters, batch, pool,
                                                 random_projections=experiment.random_projections,
                                                 update_indices=experiment.learnable_parameters)
-
         # === record
         batch_size = batch[0].shape[0]
         # only record some of the points, for memory efficiency
@@ -190,7 +185,7 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
         parameters = parameters - experiment.learning_rate*d_params
         # yolo
         if 'general_orthogonal' in experiment.name:
-            pdb.set_trace()
+            pass
         # deyolo
         if experiment.project:
             # use the polar decomposition to re-unitarise the matrix
@@ -293,7 +288,8 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         assert exp.d == d
     # OPTIONS
     batch_size = 20
-    n_batches = 5000
+    #n_batches = 50000
+    n_batches = 500
     if n_epochs is None:
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs
@@ -304,6 +300,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
     loginfo = {'vali_file': R_vali, 'train_file': R_train, 'rep': None, 'method': None}
 
     # === parallelism === #
+    # yolo
     pool = Pool(NUM_WORKERS)
 
     # === outer rep loop! === #
