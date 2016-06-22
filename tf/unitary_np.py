@@ -405,7 +405,7 @@ def eigtrick_speedy(n, w, expw, v, vdag, lambdas, learnable_parameters=None):
         for s in xrange(n):
             if r > s:
                 # real asymmetric case
-                WTW = np.outer(vdag[:, r], v[s, :]) - np.outer(vdag[:, s], v[r, :])
+                WTW = - np.outer(vdag[:, r], v[s, :]) + np.outer(vdag[:, s], v[r, :])
             else:
                 if len(lambdas) == n*(n-1)/2:
                     # ditch it all
