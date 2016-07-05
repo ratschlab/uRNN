@@ -241,61 +241,72 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
          
                 # === gradient hacks etc. === #
                 # TODO: speed-profiling
-                if model == 'uRNN':
-                    # extract dcost/dU terms from tf
-                    dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
-                    # calculate gradients of lambdas using eigenvalue decomposition trick
-                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
-                    # calculate train cost, update variables
-                    train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
-                elif model == 'ortho_tanhRNN':
-                    # extract dcost/dU terms from tf
-                    dcost_dU_re = session.run(g_and_v_U[0][0], {x:batch_x, y:batch_y})
-                    dcost_dU_im = np.zeros_like(dcost_dU_re)
-                    # calculate gradients of lambdas using eigenvalue decomposition trick
-                    U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
-                    assert np.array_equal(U_new_im_array, np.zeros_like(U_new_im_array))
-                    # calculate train cost, update variables
-                    train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
+                if model == 'uRNN' or model == 'ortho_tanhRNN':
+                    # we can use the eigtrick, lambdas is defined...
+                    if model == 'uRNN':
+                        # extract dcost/dU terms from tf
+                        dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
+                        # calculate gradients of lambdas using eigenvalue decomposition trick
+                        U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
+                        # calculate train cost, update variables
+                        train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
+                    else:
+                        #model == 'ortho_tanhRNN':
+                        # extract dcost/dU terms from tf
+                        dcost_dU_re = session.run(g_and_v_U[0][0], {x:batch_x, y:batch_y})
+                        dcost_dU_im = np.zeros_like(dcost_dU_re)
+                        # calculate gradients of lambdas using eigenvalue decomposition trick
+                        U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
+                        assert np.array_equal(U_new_im_array, np.zeros_like(U_new_im_array))
+                        # calculate train cost, update variables
+                        train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
+               
+                    # YOLO
+                    print 'sup'
+                    print lambdas
+                    print dlambdas
+                    # DEYOLO
+                    # TEST
+                    COMPARE_NUMERICAL_GRADIENT = True
+                    if COMPARE_NUMERICAL_GRADIENT:
+                        # checking numerical gradients (EXPENSIVE)
+                        # TODO: figure out why these are different :/
+                        basic_cost = session.run(cost, {x: batch_x, y:batch_y})
+                        L = lie_algebra_element(state_size, lambdas)
+                        numerical_dcost_dlambdas = np.zeros_like(lambdas)
+                        EPSILON=1e-5
+                        if model == 'uRNN':
+                            T_indices = xrange(len(lambdas))
+                        else:
+                            T_indices = []
+                            for i in xrange(0, state_size):
+                                for j in xrange(0, i):
+                                    T_indices.append(state_size*i + j)
+                        lambda_index = 0
+                        for e in T_indices:
+                            print 100.0*e/len(lambdas)
+                            perturbed_L = L + EPSILON*lie_algebra_basis_element(state_size, e, complex_out=True)
+                            perturbed_U = expm(perturbed_L)
+                            if model == 'uRNN':
+                                perturbed_U_re = np.real(perturbed_U)
+                                perturbed_U_im = np.imag(perturbed_U)
+                                perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_re_variable: perturbed_U_re, U_im_variable: perturbed_U_im})
+                            else:
+                                perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_variable: perturbed_U})
+                            gradient = (perturbed_cost - basic_cost)/EPSILON
+                            print gradient, dlambdas[lambda_index]
+                            pdb.set_trace()
+                            numerical_dcost_dlambdas[lambda_index] = gradient
+                            lambda_index += 1
+                        # now compare with dlambdas
+                        print np.mean(dlambdas - numerical_dcost_dlambdas)
+                    # DETEST
                 else:
+                    # no eigtrick required, no numerical gradients, all is fine
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
 
-                # TEST
-                COMPARE_NUMERICAL_GRADIENT = False
-                if COMPARE_NUMERICAL_GRADIENT:
-                    # checking numerical gradients (EXPENSIVE)
-                    # TODO: figure out why these are different :/
-                    basic_cost = session.run(cost, {x: batch_x, y:batch_y})
-                    L = lie_algebra_element(state_size, lambdas)
-                    numerical_dcost_dlambdas = np.zeros_like(lambdas)
-                    EPSILON=1e-5
-                    if model == 'uRNN':
-                        T_indices = xrange(len(lambdas))
-                    else:
-                        T_indices = []
-                        for i in xrange(0, state_size):
-                            for j in xrange(0, i):
-                                T_indices.append(state_size*i + j)
-                    lambda_index = 0
-                    for e in T_indices:
-                        print 100.0*e/len(lambdas)
-                        perturbed_L = L + EPSILON*lie_algebra_basis_element(state_size, e, complex_out=True)
-                        perturbed_U = expm(perturbed_L)
-                        if model == 'uRNN':
-                            perturbed_U_re = np.real(perturbed_U)
-                            perturbed_U_im = np.imag(perturbed_U)
-                            perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_re_variable: perturbed_U_re, U_im_variable: perturbed_U_im})
-                        else:
-                            perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_variable: perturbed_U})
-                        gradient = (perturbed_cost - basic_cost)/EPSILON
-                        print gradient, dlambdas[lambda_index]
-                        numerical_dcost_dlambdas[lambda_index] = gradient
-                        lambda_index += 1
-                    # now compare with dlambdas
-                    np.mean(dlambdas - numerical_dcost_dlambdas)
-                # DETEST
-
                 train_cost_trace.append(train_cost)
+
                 if np.random.random() < 0.2:
                     print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
 
@@ -396,3 +407,7 @@ elif options['task'] == 'memory':
     print 'LSTM:\t\t128'
     print 'complex_RNN:\t512'
 
+# === print stuff ===#
+print 'Created dictionary of options'
+for (key, value) in options.iteritems():
+    print key, ':\t', value
