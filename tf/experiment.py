@@ -101,10 +101,6 @@ def update_step(cost, learning_rate, clipping=False):
     print 'are with respect to the following Variables:'
     for var in tf.trainable_variables():
         print var.name, var.dtype, var.get_shape()
-    # tolo
-    vv = tf.trainable_variables()
-    pdb.set_trace()
-    # endtolo
     g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
@@ -302,6 +298,18 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         print np.mean(dlambdas - numerical_dcost_dlambdas)
                     # DETEST
                 else:
+                    # TODO testing nans
+                    vv = tf.trainable_variables()
+                    vv_vals = session.run(vv, {x: batch_x, y: batch_y})
+                    gradz = tf.gradients(cost, vv)
+                    # get the ok grads
+                    good_gradz = [g for g in gradz if not g is None]
+                    print good_gradz
+                    good_gradz_vals = session.run(good_gradz, {x: batch_x, y: batch_y})
+                    cost_vals = session.run(cost, {x:batch_x, y:batch_y})
+                    print cost_vals
+                    pdb.set_trace()
+                    # ENDTODO
                     # no eigtrick required, no numerical gradients, all is fine
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
 

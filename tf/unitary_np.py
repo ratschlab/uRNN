@@ -492,7 +492,7 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
                         WTW = 1j*(np.outer(vdag[:, s], v[r, :]) + np.outer(vdag[:, r], v[s, :]))
                 V = WTW*M
                 dU_dlambda = np.dot(np.dot(v, V), vdag)
-                delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+                delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
                 dlambdas[lambda_index] = delta
                 lambda_index += 1
 
