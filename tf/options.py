@@ -12,7 +12,6 @@ import numpy as np
 from unitary_np import unitary_matrix, complex_reflection
 from scipy.fftpack import fft, ifft
 from functools import partial
-import pdb
 from copy import deepcopy
 
 # === loss functions === #
@@ -343,16 +342,22 @@ def basis_test(d):
         self.learning_rate = 0.001
         and testing with learning rate...
     """
-    lr = 1e-3
-    general = Experiment('general_unitary_lr'+str(lr), d)
-    general.learning_rate = lr
-    exp_list = [general]
-    for basis_change in [2, 5, 10]:
-        lr_adj = lr/basis_change
-        gen_nobasis = Experiment('general_unitary_lr'+str(lr_adj), d)
-        gen_basis = Experiment('general_unitary_basis_lr'+str(lr_adj), d, change_of_basis=basis_change)
-        exp_list.append(gen_nobasis)
-        exp_list.append(gen_basis)
+    initial_lr = 1e-3 ## initial lr
+    exp_list = []
+    bases = [5.0, 10.0, 20.0]
+    lrs = [initial_lr] + [initial_lr/((x*x)/2) for x in bases]
+    print lrs
+    #lr_adj = lr/(basis_change/2)
+    for basis_change in bases:
+        print basis_change
+        for lr in lrs:
+            print lr
+            gen_nobasis = Experiment('general_unitary_lr'+str(lr), d)
+            gen_basis = Experiment('general_unitary_basis' + str(basis_change)+ '_lr'+str(lr), d, change_of_basis=basis_change)
+            gen_nobasis.learning_rate = lr
+            gen_basis.learning_rate = lr
+            exp_list.append(gen_nobasis)
+            exp_list.append(gen_basis)
     return exp_list
 
 # === more experiments 1/6/16 === #
