@@ -121,8 +121,11 @@ def numerical_gradient(loss_function, parameters, batch, pool,
                                      old_loss=original_loss,
                                      parameters=parameters,
                                      batch=batch)
-        gradients_list = pool.map(numerical_parallel, xrange(N_RANDOM))
+        if not pool is None:
+            gradients_list = pool.map(numerical_parallel, xrange(N_RANDOM))
+        else:
         # seemingly numpy will convert this to an array or something
+            gradients_list = map(numerical_parallel, xrange(N_RANDOM))
         d_params = np.sum(gradients_list, axis=0)
     else:
         numerical_parallel = partial(numerical_partial_gradient, 
@@ -131,7 +134,10 @@ def numerical_gradient(loss_function, parameters, batch, pool,
                                      old_loss=original_loss,
                                      parameters=parameters,
                                      batch=batch)
-        gradients = np.array(pool.map(numerical_parallel, update_indices))
+        if not pool is None:
+            gradients = np.array(pool.map(numerical_parallel, update_indices))
+        else:
+            gradients = np.array(map(numerical_parallel, update_indices))
         d_params[update_indices] = gradients
 
     return original_loss, d_params
@@ -267,7 +273,7 @@ def logging(d, noise, batch_size, n_batches, start_from_rep, identifier=None):
     return R_vali, R_train, R_test
 
 # === main loop === #
-def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=0.01, 
+def main(d, experiments='presets', identifier=None, n_reps=6, n_epochs=1, noise=0.01, 
          start_from_rep=0, real=False):
     """
     Args:
@@ -288,8 +294,7 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
         assert exp.d == d
     # OPTIONS
     batch_size = 20
-    #n_batches = 50000
-    n_batches = 500
+    n_batches = 50000
     if n_epochs is None:
         n_epochs = d
         print 'WARNING: No n_epochs provided, using', n_epochs
@@ -301,7 +306,10 @@ def main(d, experiments='presets', identifier=None, n_reps=3, n_epochs=1, noise=
 
     # === parallelism === #
     # yolo
-    pool = Pool(NUM_WORKERS)
+    if NUMGRAD:
+        pool = Pool(NUM_WORKERS)
+    else:
+        pool = None
 
     # === outer rep loop! === #
     for rep in xrange(start_from_rep, start_from_rep + n_reps):
