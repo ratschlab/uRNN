@@ -53,6 +53,7 @@ def get_cost(outputs, y, loss_type='MSE'):
         cost = tf.squeeze(tf.div(cost, i + 1))
     else:
         raise NotImplementedError
+    tf.scalar_summary('loss', cost)
     return cost
 
 # == some gradient-specific fns == #
@@ -225,6 +226,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === let's do it! === #
     with tf.Session() as session:
+        # TODO summaries stuff
+        merged = tf.merge_all_summaries()
+        train_writer = tf.train.SummaryWriter('./log/', session.graph)
+        # UNTODO
         session.run(tf.initialize_all_variables())
         
         # === train loop === #
@@ -291,7 +296,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                                 perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_variable: perturbed_U})
                             gradient = (perturbed_cost - basic_cost)/EPSILON
                             print gradient, dlambdas[lambda_index]
-                            pdb.set_trace()
+                            #pdb.set_trace()
                             numerical_dcost_dlambdas[lambda_index] = gradient
                             lambda_index += 1
                         # now compare with dlambdas
@@ -304,15 +309,16 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     gradz = tf.gradients(cost, vv)
                     # get the ok grads
                     good_gradz = [g for g in gradz if not g is None]
-                    print good_gradz
+                    #print good_gradz
                     good_gradz_vals = session.run(good_gradz, {x: batch_x, y: batch_y})
                     cost_vals = session.run(cost, {x:batch_x, y:batch_y})
                     print cost_vals
-                    pdb.set_trace()
+                    #pdb.set_trace()
                     # ENDTODO
                     # no eigtrick required, no numerical gradients, all is fine
-                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
-
+                    train_cost, _, summary = session.run([cost, train_op, merged], {x: batch_x, y: batch_y})
+                
+                train_writer.add_summary(summary, batch_index)
                 train_cost_trace.append(train_cost)
 
                 if np.random.random() < 0.2:
