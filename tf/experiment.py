@@ -53,7 +53,7 @@ def get_cost(outputs, y, loss_type='MSE'):
         cost = tf.squeeze(tf.div(cost, i + 1))
     else:
         raise NotImplementedError
-    tf.scalar_summary('loss', cost)
+    tf.scalar_summary('cost', cost)
     return cost
 
 # == some gradient-specific fns == #
@@ -71,10 +71,13 @@ def get_gradients(opt, cost, clipping=False, variables=None):
         gradient_variables = tf.trainable_variables()
     else:
         gradient_variables = variables
-    print 'Calculating gradients of cost with respect to Variables:'
-    for var in gradient_variables:
-        print var.name, var.dtype
     g_and_v = opt.compute_gradients(cost, gradient_variables)
+    print 'Calculating gradients of cost with respect to Variables:'
+    for (g, v) in g_and_v:
+        print v.name, v.dtype, v.get_shape()
+        if not v is None and not g is None:
+            tf.histogram_summary(v.name + 'grad', g)
+            tf.histogram_summary(v.name, v)
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
     return g_and_v
@@ -98,11 +101,14 @@ def update_step(cost, learning_rate, clipping=False):
     opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate,
                                     decay=0.9,
                                     momentum=0.0)
+    g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
     print 'By the way, the gradients of cost',
     print 'are with respect to the following Variables:'
-    for var in tf.trainable_variables():
-        print var.name, var.dtype, var.get_shape()
-    g_and_v = opt.compute_gradients(cost, tf.trainable_variables())
+    for (g, v) in g_and_v:
+        print v.name, v.dtype, v.get_shape()
+        if not v is None and not g is None:
+            tf.histogram_summary(v.name + 'grad', g)
+            tf.histogram_summary(v.name, v)
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
@@ -304,15 +310,15 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # DETEST
                 else:
                     # TODO testing nans
-                    vv = tf.trainable_variables()
-                    vv_vals = session.run(vv, {x: batch_x, y: batch_y})
-                    gradz = tf.gradients(cost, vv)
+                   # vv = tf.trainable_variables()
+                   # vv_vals = session.run(vv, {x: batch_x, y: batch_y})
+                   # gradz = tf.gradients(cost, vv)
                     # get the ok grads
-                    good_gradz = [g for g in gradz if not g is None]
+                   # good_gradz = [g for g in gradz if not g is None]
                     #print good_gradz
-                    good_gradz_vals = session.run(good_gradz, {x: batch_x, y: batch_y})
-                    cost_vals = session.run(cost, {x:batch_x, y:batch_y})
-                    print cost_vals
+                   # good_gradz_vals = session.run(good_gradz, {x: batch_x, y: batch_y})
+                   # cost_vals = session.run(cost, {x:batch_x, y:batch_y})
+                   # print cost_vals
                     #pdb.set_trace()
                     # ENDTODO
                     # no eigtrick required, no numerical gradients, all is fine
@@ -351,15 +357,6 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # uRNN specific stuff: save lambdas
                     if model == 'uRNN':
                         lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
-
-                # occasionally, calculate all the gradients
-                if batch_index % 100 == 0:
-                    pass
-                    #hidden_states = tf.variables(...) # ... figure out which these are, do I need to name them while defining in RNNCell?
-                    #gradz = tf.gradients(cost, hidden_states)
-                    #grad_vals = session.run(gradz)
-                    #grad_mags = ... get their magnitudes, also values
-                    #hidden_gradients_file.write(str(batch_index) + ' ' + str('\n' + str(batch_index) + ' ').join(map(str, grad_mags)) + '\n') # haha what is wrong with me
 
 
         print 'Training completed.'
