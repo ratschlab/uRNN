@@ -30,7 +30,7 @@ from scipy.linalg import eigh
 
 # === some globals === #
 MEASURE_SKIP = 250
-NUM_WORKERS = 30
+NUM_WORKERS = 1
 NUMGRAD = True
 
 # === utility functions === #
@@ -306,7 +306,7 @@ def main(d, experiments='presets', identifier=None, n_reps=6, n_epochs=1, noise=
 
     # === parallelism === #
     # yolo
-    if NUMGRAD:
+    if NUMGRAD and NUM_WORKERS > 1:
         pool = Pool(NUM_WORKERS)
     else:
         pool = None
