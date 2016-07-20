@@ -207,6 +207,9 @@ class Experiment(object):
 
         if 'orthogonal' in self.name and not self.real:
             raise ValueError(self.name, self.real)
+
+        if self.change_of_basis > 0 and not 'general' in self.name:
+            raise ValueError(self.name, self.change_of_basis)
         
     def initial_parameters(self):
         """
@@ -218,7 +221,7 @@ class Experiment(object):
                 ip = np.random.normal(size=d)
             else:
                 ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
-        elif 'projection' in self.name or self.name == 'free_matrix':
+        elif 'projection' in self.name or self.name == 'free_matrix' or 'hazan' in self.name:
             if self.real:
                 ip = np.random.normal(size=d*d)
             else:
@@ -229,6 +232,8 @@ class Experiment(object):
             ip = np.random.normal(size=d*d)
         elif 'general_orthogonal' in self.name:
             ip = np.random.normal(size=d*(d-1)/2)
+        elif 'hazan' in self.name:
+            ip = np.zeros(shape=(d, d))
         else:
             raise ValueError(self.name)
        
@@ -248,7 +253,7 @@ class Experiment(object):
         if self.name in {'trivial'}:
             fn = trivial_loss
             self.n_parameters = self.d
-        elif 'projection' in self.name or self.name == 'free_matrix':
+        elif 'projection' in self.name or self.name == 'free_matrix' or 'hazan' in self.name:
             fn = free_matrix_loss
             self.n_parameters = self.d*self.d
         elif 'complex_RNN' in self.name:
@@ -368,4 +373,13 @@ def test_orth(d):
     general_unitary = Experiment('general_unitary', d)
     general_orthogonal = Experiment('general_orthogonal', d, real=True)
     exp_list = [proj_real, proj_complex, general_unitary, general_orthogonal]
+    return exp_list
+
+# === hazan === #
+def hazan(d):
+    h_real = Experiment('hazan_real', d, project=False, real=True)
+    h_imag = Experiment('hazan_imag', d, project=False, real=False)
+    general_unitary = Experiment('general_unitary', d)
+    general_orthogonal = Experiment('general_orthogonal', d, real=True)
+    exp_list = [h_real, general_orthogonal, h_imag, general_unitary]
     return exp_list

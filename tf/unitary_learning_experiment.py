@@ -30,10 +30,10 @@ from scipy.linalg import eigh
 
 # === some globals === #
 MEASURE_SKIP = 250
-NUM_WORKERS = 1
+NUM_WORKERS = 30
 NUMGRAD = True
 
-# === utility functions === #
+# === gradient-related functions === #
 def numerical_partial_gradient(i, n, loss_function, old_loss, parameters, 
                                batch, EPSILON=10e-6):
     """
@@ -142,6 +142,61 @@ def numerical_gradient(loss_function, parameters, batch, pool,
 
     return original_loss, d_params
 
+def hazan_gradient(loss_function, parameters, batch, learning_rate, update_indices=None):
+    if update_indices is None:
+        update_indices = xrange(len(parameters))
+    # --- #
+    original_loss = loss_function(parameters, batch)
+
+    # roughly directly copying the algorithm from page 6 of:
+    #   https://users.soe.ucsc.edu/~manfred/pubs/J67.pdf
+    x, y = batch
+    batch_size, d = x.shape
+    # since we do it in batches, our "W0" in each iteration is just the last
+    # value of the matrix, given by the parameters...
+    Wt = np.zeros(shape=(d, d))
+    Wtm = np.zeros(shape=(d, d))
+    W_prev = np.zeros(shape=(d, d))
+    Wt[:, :] = parameters.reshape(d, d)
+    for t in xrange(batch_size):
+        pdb.set_trace()
+        W_prev[:, :] = Wt
+        # step 3
+        xt, yt = x[t], y[t]
+        # step 4, 5
+        zt =  np.dot(W_prev, xt)
+        zt_len = np.linalg.norm(zt)
+        if zt_len <= 0:
+            # need to find out what e1 is, in the algo
+            raise ValueError
+        else:
+            zt_tilde = zt/np.linalg.norm(zt)
+            if zt_len <= 1:
+                prob = (1.0 + zt_len)/2
+                if np.random.random() <= prob:
+                    yt = zt_tilde
+                else:
+                    # i think this is what's going on
+                    yt = -zt_tilde
+            else:
+                yt = zt_tilde
+        # step 6
+        if zt_len <= 1:
+            Wtm[:, :] = W_prev 
+        else:
+            Wtm[:, :] = np.dot(W_prev, (1 - (1 - 1.0/zt_len)*np.outer(xt, xt)))
+        # step 8
+        Wt[:, :] = Wtm + learning_rate*np.outer(yt, xt)
+    # now, we have to grab the difference, to get the d_params term
+    # later on, we have:
+    #   parameters = parameters - experiment.learning_rate*d_params
+    # d_params is the output of this function, and what we are about to calculate
+    # is theta' - theta = - alpha d_params
+    dM = Wt - parameters.reshape(d, d)
+    d_params = -dM.reshape(d*d)/learning_rate
+    return original_loss, d_params
+
+###
 def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
     """
     The main training loop...
@@ -167,10 +222,15 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
         if 'general_unitary' in exp_name and not NUMGRAD:
             loss, d_params = analytical_gradient(loss_function, parameters, batch,
                                                 update_indices=experiment.learnable_parameters)
+        elif 'hazan' in exp_name:
+            loss, d_params = hazan_gradient(loss_function, parameters, batch,
+                                            experiment.learning_rate, 
+                                            update_indices=experiment.learnable_parameters)
         else:
             loss, d_params = numerical_gradient(loss_function, parameters, batch, pool,
                                                 random_projections=experiment.random_projections,
                                                 update_indices=experiment.learnable_parameters)
+
         # === record
         batch_size = batch[0].shape[0]
         # only record some of the points, for memory efficiency
