@@ -23,6 +23,7 @@ from unitary_np import unitary_matrix, project_to_unitary, lie_algebra_element, 
 from functools import partial
 from multiprocessing import Pool
 from random import sample
+from copy import deepcopy
 
 from options import presets
 
@@ -142,58 +143,77 @@ def numerical_gradient(loss_function, parameters, batch, pool,
 
     return original_loss, d_params
 
-def hazan_gradient(loss_function, parameters, batch, learning_rate, update_indices=None):
+def hazan_gradient(loss_function, parameters, batch, learning_rate, 
+                   update_indices=None, to_orthogonal=False):
+    # TODO: WHY SO INSTABLE
     if update_indices is None:
         update_indices = xrange(len(parameters))
     # --- #
     original_loss = loss_function(parameters, batch)
 
-    # roughly directly copying the algorithm from page 6 of:
+    # roughly directly copying the algorithm (Lazy Projection GD) from page 6 of:
     #   https://users.soe.ucsc.edu/~manfred/pubs/J67.pdf
     x, y = batch
     batch_size, d = x.shape
     # since we do it in batches, our "W0" in each iteration is just the last
     # value of the matrix, given by the parameters...
-    Wt = np.zeros(shape=(d, d))
-    Wtm = np.zeros(shape=(d, d))
-    W_prev = np.zeros(shape=(d, d))
-    Wt[:, :] = parameters.reshape(d, d)
+    if to_orthogonal:
+        # actually, this won't map back nicely...
+        Wtm = np.zeros(shape=(2*d, 2*d))
+        Wt = np.empty(shape=(2*d, 2*d))
+        A = np.real(parameters).reshape(d, d)
+        B = np.imag(parameters).reshape(d, d)
+        Wt[:d, :d] = A[:, :]
+        Wt[:d, d:] = -B[:, :]
+        Wt[d:, :d] = B[:, :]
+        Wt[d:, d:] = A[:, :]
+    else:
+        Wtm = np.zeros(shape=(d, d))
+        Wt = parameters.reshape(d, d)
+    Wt_orig = deepcopy(Wt)
     for t in xrange(batch_size):
-        pdb.set_trace()
-        W_prev[:, :] = Wt
+        # debug
+        #    W_prev[:, :] = Wt[:, :]
         # step 3
         xt, yt = x[t], y[t]
+        if to_orthogonal:
+            xt = np.array([np.real(xt), np.imag(xt)]).flatten()
+            yt = np.array([np.real(yt), np.imag(yt)]).flatten()
         # step 4, 5
-        zt =  np.dot(W_prev, xt)
+        zt =  np.dot(Wt, xt)
         zt_len = np.linalg.norm(zt)
         if zt_len <= 0:
-            # need to find out what e1 is, in the algo
-            raise ValueError
+            # arbitrary choice
+            zt = np.zeros_like(xt)
+            zt[0] = 1
+            zt_len = np.linalg.norm(zt)
         else:
             zt_tilde = zt/np.linalg.norm(zt)
-            if zt_len <= 1:
-                prob = (1.0 + zt_len)/2
-                if np.random.random() <= prob:
-                    yt = zt_tilde
-                else:
-                    # i think this is what's going on
-                    yt = -zt_tilde
-            else:
-                yt = zt_tilde
         # step 6
         if zt_len <= 1:
-            Wtm[:, :] = W_prev 
+            Wtm[:, :] = Wt 
         else:
-            Wtm[:, :] = np.dot(W_prev, (1 - (1 - 1.0/zt_len)*np.outer(xt, xt)))
+            # TODO DEBUG
+            #print 'zt_len > 1', zt_len
+            #pdb.set_trace()
+            # testing!!!
+            #Wtm[:, :] = Wt
+            Wtm[:, :] = np.dot(Wt, (1 - (1 - 1.0/zt_len)*np.outer(xt, xt)))
         # step 8
-        Wt[:, :] = Wtm + learning_rate*np.outer(yt, xt)
+        Wt = Wtm + learning_rate*np.outer(yt, xt)
     # now, we have to grab the difference, to get the d_params term
     # later on, we have:
     #   parameters = parameters - experiment.learning_rate*d_params
     # d_params is the output of this function, and what we are about to calculate
     # is theta' - theta = - alpha d_params
-    dM = Wt - parameters.reshape(d, d)
-    d_params = -dM.reshape(d*d)/learning_rate
+    if to_orthogonal:
+        dM = Wt - Wt_orig
+        dA = dM[:d, :d]
+        dB = dM[d:, :d]
+        d_params = -(1.0/learning_rate)*(dA + 1j*dB).reshape(d*d)
+    else:
+        dM = Wt - parameters.reshape(d, d)
+        d_params = -(1.0/learning_rate)*dM.reshape(d*d)
     return original_loss, d_params
 
 ###
@@ -375,8 +395,8 @@ def main(d, experiments='presets', identifier=None, n_reps=6, n_epochs=1, noise=
     for rep in xrange(start_from_rep, start_from_rep + n_reps):
         # select a different method each time (let's not be random about this)
         if real:
-            # we have to generate a special unitary matrix...
-            method = 'lie_algebra'
+            # we have to generate an orthogonal matrix
+            method = 'qr'
         else:
             method = ['lie_algebra', 'qr', 'composition'][rep % 3]
         if method == 'sparse':

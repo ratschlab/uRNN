@@ -37,7 +37,32 @@ def free_matrix_loss(parameters, batch):
 
     M = parameters.reshape(d, d)
 
-    y_hat = np.dot(x, M)
+    # TODO: possibly need a .T here, ack
+    y_hat = np.dot(x, M.T)
+
+    differences = y_hat - y
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
+    return loss
+
+def hazan_loss(parameters, batch):
+    """
+    The predictions are done somehow randomly, according to step 5 in 
+    Algorithm 1 here: https://users.soe.ucsc.edu/~manfred/pubs/J67.pdf
+    """
+    x, y = batch
+    n_batch, d = x.shape
+
+    M = parameters.reshape(d, d)
+    
+    # actually z^T
+    z = np.dot(x, M.T)
+    z_lens = np.linalg.norm(z, axis=1)
+    z_tilde = z/z_lens.reshape(-1, 1)
+    pos_probs = (1.0 + z_lens)/2
+    # if z_len > 1, this is just >1, so it's fine
+    draws = np.random.random(n_batch)
+    signs = (draws < pos_probs)*2 - 1
+    y_hat = signs.reshape(-1, 1)*z_tilde
 
     differences = y_hat - y
     loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
@@ -221,7 +246,7 @@ class Experiment(object):
                 ip = np.random.normal(size=d)
             else:
                 ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
-        elif 'projection' in self.name or self.name == 'free_matrix' or 'hazan' in self.name:
+        elif 'projection' in self.name or self.name == 'free_matrix':
             if self.real:
                 ip = np.random.normal(size=d*d)
             else:
@@ -233,7 +258,10 @@ class Experiment(object):
         elif 'general_orthogonal' in self.name:
             ip = np.random.normal(size=d*(d-1)/2)
         elif 'hazan' in self.name:
-            ip = np.zeros(shape=(d, d))
+            if self.real:
+                ip = np.zeros(shape=(d*d))
+            else:
+                ip = np.zeros(shape=(d*d)) + 1j*np.zeros(shape=(d*d))
         else:
             raise ValueError(self.name)
        
@@ -253,8 +281,11 @@ class Experiment(object):
         if self.name in {'trivial'}:
             fn = trivial_loss
             self.n_parameters = self.d
-        elif 'projection' in self.name or self.name == 'free_matrix' or 'hazan' in self.name:
+        elif 'projection' in self.name or self.name == 'free_matrix':
             fn = free_matrix_loss
+            self.n_parameters = self.d*self.d
+        elif 'hazan' in self.name:
+            fn = hazan_loss
             self.n_parameters = self.d*self.d
         elif 'complex_RNN' in self.name:
             permutation = np.random.permutation(np.eye(self.d))
@@ -377,9 +408,15 @@ def test_orth(d):
 
 # === hazan === #
 def hazan(d):
+    lr = 2e-7
     h_real = Experiment('hazan_real', d, project=False, real=True)
-    h_imag = Experiment('hazan_imag', d, project=False, real=False)
+#    h_imag = Experiment('hazan_imag', d, project=False, real=False)
     general_unitary = Experiment('general_unitary', d)
-    general_orthogonal = Experiment('general_orthogonal', d, real=True)
-    exp_list = [h_real, general_orthogonal, h_imag, general_unitary]
+    complex_RNN = Experiment('complex_RNN', d)
+    proj_real = Experiment('projection_orthogonal', d, project=True, real=True)
+#    general_orthogonal = Experiment('general_orthogonal', d, real=True)
+    exp_list = [h_real, proj_real, general_unitary, complex_RNN]
+    for e in exp_list:
+        if 'hazan' in e.name:
+            e.learning_rate = lr
     return exp_list
