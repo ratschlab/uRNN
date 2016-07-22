@@ -396,7 +396,7 @@ def main(d, experiments='presets', identifier=None, n_reps=6, n_epochs=1, noise=
         # select a different method each time (let's not be random about this)
         if real:
             # we have to generate an orthogonal matrix
-            method = 'qr'
+            method = 'lie_algebra'
         else:
             method = ['lie_algebra', 'qr', 'composition'][rep % 3]
         if method == 'sparse':
