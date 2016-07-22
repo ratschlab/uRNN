@@ -232,10 +232,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === let's do it! === #
     with tf.Session() as session:
-        # TODO summaries stuff
+        # summaries
         merged = tf.merge_all_summaries()
-        train_writer = tf.train.SummaryWriter('./log/', session.graph)
-        # UNTODO
+        train_writer = tf.train.SummaryWriter('./log/' + model, session.graph)
+        
         session.run(tf.initialize_all_variables())
         
         # === train loop === #
@@ -379,7 +379,7 @@ parser.add_argument('--task', type=str, help='which task? adding/memory',
 parser.add_argument('--batch_size', type=int, 
                     default=20)
 parser.add_argument('--state_size', type=int, help='size of internal state', 
-                    default=40)
+                    default=5)
 parser.add_argument('--T', type=int, help='memory time-scale or addition input length', 
                     default=100)
 parser.add_argument('--model', type=str, help='which RNN model to use?', 
