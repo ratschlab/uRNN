@@ -415,7 +415,7 @@ def hazan(d):
     complex_RNN = Experiment('complex_RNN', d)
     proj_real = Experiment('projection_orthogonal', d, project=True, real=True)
 #    general_orthogonal = Experiment('general_orthogonal', d, real=True)
-    exp_list = [h_real, proj_real, general_unitary, complex_RNN]
+    exp_list = [h_real, general_unitary, proj_real]
     for e in exp_list:
         if 'hazan' in e.name:
             e.learning_rate = lr
