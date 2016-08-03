@@ -435,7 +435,7 @@ class complex_RNNCell(steph_RNNCell):
 #            new_state = intermediate_state
 
             # TODO testing
-            new_state = step2
+      #      new_state = step2
             
             real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
             output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')

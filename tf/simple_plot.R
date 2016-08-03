@@ -9,11 +9,12 @@ args<-commandArgs(TRUE)
 PLOT_TRAIN<-TRUE
 
 d<-args[1]
-d<-3
 #identifier<-args[2]
 noise<-0.01
 
-fname_base<-paste0('output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('output/simple/hazan_3_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb5000_')
 #fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('output/simple/lr_d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
@@ -34,7 +35,8 @@ print(levels(data$experiment))
 #data$experiment<-factor(data$experiment, labels=c("composition", "lie algebra", "lie algebra (basis)", "projection"))
 
 
-ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="right")  + ylim(0, 25)
+ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="right")
+#+ ylim(0, 25)
 #+ ylim(0, 30) + xlim(0, 2e06)
 #+scale_colour_manual(values=gg_color_hue(5)[c(1, 2, 5)]) + scale_fill_manual(values=gg_color_hue(5)[c(1,2 , 5)])
 #$+ ylim(0, 5) + xlim(0, 1e06) + 
@@ -51,8 +53,8 @@ if (PLOT_TRAIN){
 }
 
 # --- print summary statistics about test --- #
-#fname<-paste0(fname_base, 'test.txt')
-fname<-paste0(fname_base, 'comb.txt')
+fname<-paste0(fname_base, 'test.txt')
+#fname<-paste0(fname_base, 'comb.txt')
 dtest<-read.table(fname, header=T)
 
 #if ('where' %in% names(dtest)){
@@ -63,7 +65,7 @@ my_means <- function(data, indices){
     print(exps)
     exper<-exps[indices]
     dd <-subset(data, experiment==exper)$loss
-    print(dd[10,])
+#    print(dd[10,])
     return(mean(dd))
 }
 
