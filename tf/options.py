@@ -9,9 +9,10 @@
 # ------------------------------------------
 
 import numpy as np
-from unitary_np import unitary_matrix
+from unitary_np import unitary_matrix, complex_reflection
 from scipy.fftpack import fft, ifft
 from functools import partial
+from copy import deepcopy
 
 # === loss functions === #
 def trivial_loss(parameters, batch):
@@ -23,7 +24,7 @@ def trivial_loss(parameters, batch):
 
     y_hat = x + parameters
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 def free_matrix_loss(parameters, batch):
@@ -36,67 +37,38 @@ def free_matrix_loss(parameters, batch):
 
     M = parameters.reshape(d, d)
 
-    y_hat = np.dot(x, M)
+    # TODO: possibly need a .T here, ack
+    y_hat = np.dot(x, M.T)
 
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
+    return loss
+
+def hazan_loss(parameters, batch):
+    """
+    The predictions are done somehow randomly, according to step 5 in 
+    Algorithm 1 here: https://users.soe.ucsc.edu/~manfred/pubs/J67.pdf
+    """
+    x, y = batch
+    n_batch, d = x.shape
+
+    M = parameters.reshape(d, d)
+    
+    # actually z^T
+    z = np.dot(x, M.T)
+    z_lens = np.linalg.norm(z, axis=1)
+    z_tilde = z/z_lens.reshape(-1, 1)
+    pos_probs = (1.0 + z_lens)/2
+    # if z_len > 1, this is just >1, so it's fine
+    draws = np.random.random(n_batch)
+    signs = (draws < pos_probs)*2 - 1
+    y_hat = signs.reshape(-1, 1)*z_tilde
+
+    differences = y_hat - y
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 # === parametrisation-specific functions === #
-
-def do_reflection(x, v_re, v_im, theano_reflection=False):
-    """
-    Hey, it's this function again! Woo!
-    NOTE/WARNING: theano_reflection gives a DIFFERENT RESULT to the other one...
-    see this unresolved issue:
-    https://github.com/amarshah/complex_RNN/issues/2
-    """
-    if theano_reflection:
-        # (mostly copypasta from theano, with T replaced by np all over)
-        # FOR NOW OK
-        input_re = np.real(x)
-        # alpha
-        input_im = np.imag(x)
-        # beta
-        reflect_re = v_re
-        # mu
-        reflect_im = v_im
-        # nu
-
-        vstarv = (reflect_re**2 + reflect_im**2).sum()
-
-        # (the following things are roughly scalars)
-        # (they actually are as long as the batch size, e.g. input[0])
-        input_re_reflect_re = np.dot(input_re, reflect_re)
-        # αμ
-        input_re_reflect_im = np.dot(input_re, reflect_im)
-        # αν
-        input_im_reflect_re = np.dot(input_im, reflect_re)
-        # βμ
-        input_im_reflect_im = np.dot(input_im, reflect_im)
-        # βν
-
-        a = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
-        # outer(αμ - βν, mu)
-        b = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
-        # outer(αν + βμ, nu)
-        c = np.outer(input_re_reflect_re - input_im_reflect_im, reflect_im)
-        # outer(αμ - βν, nu)
-        d = np.outer(input_re_reflect_im + input_im_reflect_re, reflect_re)
-        # outer(αν + βμ, mu)
-
-        output_re = input_re - 2. / vstarv * (d - c)
-        output_im = input_im - 2. / vstarv * (a + b)
-
-        output = output_re + 1j*output_im
-    else:
-        # do it the 'old fashioned' way
-        v = v_re + 1j*v_im
-        # aka https://en.wikipedia.org/wiki/Reflection_%28mathematics%29#Reflection_through_a_hyperplane_in_n_dimensions
-        # but with conj v dot with x
-        output = x - (2.0/np.dot(v, np.conj(v))) * np.outer(np.dot(x, np.conj(v)), v)
-
-    return output
 
 def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     """
@@ -131,12 +103,12 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     # === do the transformation === #
     step1 = np.dot(x, diag1)
     step2 = fft(step1)
-    step3 = do_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
+    step3 = complex_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
     #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
     step6 = ifft(step5)
-    step7 = do_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
+    step7 = complex_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
     #step7 = step6
     step8 = np.dot(step7, diag3)
     # POSSIBLY do relu_mod...
@@ -144,7 +116,7 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
     # === now calculate the loss ... === #
     y_hat = step8
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
     return loss
 
 def complex_RNN_multiloss(parameters, permutations, batch):
@@ -177,21 +149,29 @@ def complex_RNN_multiloss(parameters, permutations, batch):
     
     
 
-def general_unitary_loss(parameters, batch, basis_change=None):
+def general_unitary_loss(parameters, batch, basis_change=None, real=False,
+                         return_gradient=False):
     """
     Hey, it's my one! Rendered very simple by existence of helper functions. :)
     """
     x, y = batch
     d = x.shape[1]
+    batch_size = x.shape[0]
 
     lambdas = parameters
-    U = unitary_matrix(d, lambdas=lambdas, basis_change=basis_change)
+    U = unitary_matrix(d, lambdas=lambdas, basis_change=basis_change, real=real)
 
     y_hat = np.dot(x, U.T)
     differences = y_hat - y
-    loss = np.mean(np.linalg.norm(y_hat - y, axis=1))
-
-    return loss
+    loss = np.mean(np.square(np.linalg.norm(y_hat - y, axis=1)))
+    if not return_gradient:
+        return loss
+    else:
+        d_xs = np.einsum('ij, ik', differences, np.conj(x))
+        ds_x = np.einsum('ij, ik', np.conj(differences), x) 
+        dloss_dUre = 1.0/batch_size * (d_xs + ds_x)
+        dloss_dUim = 1j*1.0/batch_size * (-d_xs + ds_x)
+        return loss, dloss_dUre, dloss_dUim
 
 # === experiment class === #
 class Experiment(object):
@@ -203,7 +183,8 @@ class Experiment(object):
                  random_projections=0,
                  restrict_parameters=False,
                  theano_reflection=False,
-                 change_of_basis=0):
+                 change_of_basis=0,
+                 real=False):
         # required
         self.name = name
         self.d = d
@@ -213,6 +194,7 @@ class Experiment(object):
         self.restrict_parameters = restrict_parameters
         self.theano_reflection = theano_reflection
         self.change_of_basis = change_of_basis
+        self.real = real
         # check
         self.check_attributes()
         # defaults
@@ -229,16 +211,30 @@ class Experiment(object):
         """
         Make sure attributes are sensible.
         """
-        if self.d <= 7 and self.restrict_parameters:
-            print 'WARNING: d is <= 7, but restrict parameters is true. It will have no effect.'
-        if self.restrict_parameters and not 'general_unitary' in self.name:
-            print 'WARNING: restrict_parameters is only implemented for unitary experiments. It will have no effect.'
+        if self.restrict_parameters:
+            if self.d <= 7:
+                print 'WARNING: d is <= 7, but restrict parameters is true. Setting false.'
+            if not 'general' in self.name:
+                print 'WARNING: restrict_parameters is only implemented for general unitary/orthogonal experiments. Setting false.'
+            self.restrict_parameters = False
 
         if self.theano_reflection and not self.name == 'complex_RNN_vanilla':
-            raise ValueError(self.theano_reflection)
+            raise ValueError(self.name, self.theano_reflection)
 
-        if self.name == 'projection' and not self.project:
-            raise ValueError(self.project)
+        if 'projection' in self.name and not self.project:
+            raise ValueError(self.name, self.project)
+
+        if self.real:
+            if 'complex_RNN' in self.name:
+                raise ValueError(self.name, self.real)
+            if 'unitary' in self.name:
+                raise ValueError(self.name, self.real)
+
+        if 'orthogonal' in self.name and not self.real:
+            raise ValueError(self.name, self.real)
+
+        if self.change_of_basis > 0 and not 'general' in self.name:
+            raise ValueError(self.name, self.change_of_basis)
         
     def initial_parameters(self):
         """
@@ -246,19 +242,33 @@ class Experiment(object):
         """
         d = self.d
         if self.name in {'trivial'}:
-            ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
-        elif self.name in {'free_matrix', 'projection'}:
-            ip = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
+            if self.real:
+                ip = np.random.normal(size=d)
+            else:
+                ip = np.random.normal(size=d) + 1j*np.random.normal(size=d)
+        elif 'projection' in self.name or self.name == 'free_matrix':
+            if self.real:
+                ip = np.random.normal(size=d*d)
+            else:
+                ip = np.random.normal(size=d*d) + 1j*np.random.normal(size=d*d)
         elif 'complex_RNN' in self.name:
             ip = np.random.normal(size=7*d)
         elif 'general_unitary' in self.name:
             ip = np.random.normal(size=d*d)
+        elif 'general_orthogonal' in self.name:
+            ip = np.random.normal(size=d*(d-1)/2)
+        elif 'hazan' in self.name:
+            if self.real:
+                ip = np.zeros(shape=(d*d))
+            else:
+                ip = np.zeros(shape=(d*d)) + 1j*np.zeros(shape=(d*d))
         else:
             raise ValueError(self.name)
        
         n_parameters = np.prod(ip.shape)
         assert n_parameters == self.n_parameters
         if ip.dtype == 'complex':
+            assert not self.real
             n_parameters = 2*n_parameters
         print 'Initialising', n_parameters, 'real parameters.'
         return ip
@@ -271,19 +281,29 @@ class Experiment(object):
         if self.name in {'trivial'}:
             fn = trivial_loss
             self.n_parameters = self.d
-        elif self.name in {'free_matrix', 'projection'}:
+        elif 'projection' in self.name or self.name == 'free_matrix':
             fn = free_matrix_loss
+            self.n_parameters = self.d*self.d
+        elif 'hazan' in self.name:
+            fn = hazan_loss
             self.n_parameters = self.d*self.d
         elif 'complex_RNN' in self.name:
             permutation = np.random.permutation(np.eye(self.d))
             fn = partial(complex_RNN_loss, permutation=permutation, 
                          theano_reflection=self.theano_reflection)
             self.n_parameters = 7*self.d
-        elif 'general_unitary' in self.name:
+        elif 'general_' in self.name:
             if self.change_of_basis > 0 and self.basis_change is None:
                 self.set_basis_change()
-            fn = partial(general_unitary_loss, basis_change=self.basis_change)
-            self.n_parameters = self.d*self.d
+            fn = partial(general_unitary_loss, 
+                         basis_change=self.basis_change,
+                         real=self.real)
+            if 'unitary' in self.name:
+                self.n_parameters = self.d*self.d
+            elif 'orthogonal' in self.name:
+                self.n_parameters = self.d*(self.d-1)/2
+            else:
+                raise ValueError(self.name)
         else:
             raise ValueError(self.name)
 
@@ -325,9 +345,13 @@ def presets(d):
 
 def test_random_projections(d=6):
     exp_list = []
-    for j in [4, 9, 16, 25, 36]:
-        #    for j in np.linspace(np.sqrt(d), 0.5*d*(d-1), num=3, dtype=int):
-        exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
+    if d == 6:
+        #for j in np.linspace(np.sqrt(d), 0.5*d*(d-1), num=5, dtype=int):
+        for j in [4, 9, 16, 25, 36]:
+            exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
+    elif d == 12:
+        for j in [9, 25, 49, 81, 144]:
+            exp_list.append(Experiment('general_unitary_' + str(j), d, random_projections=j))
     exp_list.append(Experiment('general_unitary', d))
     return exp_list
 
@@ -351,4 +375,52 @@ def rerun(d):
     if d > 7:
         general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=True)
         exp_list.append(general_restricted)
+    return exp_list
+
+def basis_test(d):
+    """
+        self.learning_rate = 0.001
+        and testing with learning rate...
+    """
+    initial_lr = 1e-3 ## initial lr
+    exp_list = []
+    bases = [5.0, 10.0, 20.0]
+    lrs = [initial_lr] + [initial_lr/((x*x)/2) for x in bases]
+    print lrs
+    #lr_adj = lr/(basis_change/2)
+    for basis_change in bases:
+        print basis_change
+        for lr in lrs:
+            print lr
+            gen_nobasis = Experiment('general_unitary_lr'+str(lr), d)
+            gen_basis = Experiment('general_unitary_basis' + str(basis_change)+ '_lr'+str(lr), d, change_of_basis=basis_change)
+            gen_nobasis.learning_rate = lr
+            gen_basis.learning_rate = lr
+            exp_list.append(gen_nobasis)
+            exp_list.append(gen_basis)
+    return exp_list
+
+# === more experiments 1/6/16 === #
+def test_orth(d):
+    """ testing new features """
+    proj_real = Experiment('projection_orthogonal', d, project=True, real=True)
+    proj_complex = Experiment('projection_unitary', d, project=True)
+    general_unitary = Experiment('general_unitary', d)
+    general_orthogonal = Experiment('general_orthogonal', d, real=True)
+    exp_list = [proj_real, proj_complex, general_unitary, general_orthogonal]
+    return exp_list
+
+# === hazan === #
+def hazan(d):
+    lr = 2e-7
+    h_real = Experiment('hazan_real', d, project=False, real=True)
+#    h_imag = Experiment('hazan_imag', d, project=False, real=False)
+    general_unitary = Experiment('general_unitary', d)
+    complex_RNN = Experiment('complex_RNN', d)
+    proj_real = Experiment('projection_orthogonal', d, project=True, real=True)
+#    general_orthogonal = Experiment('general_orthogonal', d, real=True)
+    exp_list = [h_real, general_unitary, proj_real]
+    for e in exp_list:
+        if 'hazan' in e.name:
+            e.learning_rate = lr
     return exp_list

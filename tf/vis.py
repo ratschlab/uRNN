@@ -11,14 +11,48 @@ import numpy as np
 plt.clf()
 
 # === constants === #
-BATCH_SIZE = 20
-models = ['RNN', 'IRNN', 'LSTM', 'complex_RNN', 'orthogonal_RNN']
-colours = {'RNN': 'r', 'IRNN': 'pink', 'LSTM': 'g', 'complex_RNN': 'b', 'orthogonal_RNN': 'purple'}
+models = ['80_tanhRNN', 
+          '32_tanhRNN',
+          '18_tanhRNN',
+          '17_tanhRNN',
+          '16_tanhRNN',
+          '15_tanhRNN',
+          '14_tanhRNN',
+          '2_tanhRNN']
+          #          'IRNN', 
+          #          'LSTM', 
+          #          'complex_RNN', 
+          #          'ortho_tanhRNN',
+          #          'ortho16_tanhRNN', 
+          #          'ortho64_tanhRNN', 
+          #          'ortho128_tanhRNN', 
+          #          'uRNN']
+cmap = mpl.cm.get_cmap('gist_rainbow')
+
+colours = {'80_tanhRNN': mpl.colors.rgb2hex(cmap(0)),
+           '32_tanhRNN': mpl.colors.rgb2hex(cmap(1.0*(1.0/len(models)))),
+           '18_tanhRNN': mpl.colors.rgb2hex(cmap(2.0*(1.0/len(models)))),
+           '17_tanhRNN': mpl.colors.rgb2hex(cmap(3.0*(1.0/len(models)))),
+           '16_tanhRNN': mpl.colors.rgb2hex(cmap(4.0*(1.0/len(models)))),
+           '15_tanhRNN': mpl.colors.rgb2hex(cmap(5.0*(1.0/len(models)))),
+           '14_tanhRNN': mpl.colors.rgb2hex(cmap(6.0*(1.0/len(models)))),
+           '2_tanhRNN': mpl.colors.rgb2hex(cmap(7.0*(1.0/len(models)))),
+           'IRNN': 'pink', 
+           'LSTM': 'green', 
+           'complex_RNN': 'blue', 
+           'ortho_tanhRNN': 'purple', 
+           'uRNN': 'grey', 
+           'ortho16_tanhRNN': 'orange', 
+           'ortho64_tanhRNN': 'magenta', 
+           'ortho128_tanhRNN': 'cyan'}
 
 # === grab inputs === #
-T = int(sys.argv[1])
-task = sys.argv[2]
-plot_test = sys.argv[3] == 'test'
+#T = int(sys.argv[1])
+#task = sys.argv[2]
+#plot_vali = sys.argv[3] == 'vali'
+T = 100
+task = 'adding'
+plot_vali = sys.argv[1] == 'vali'
 
 # === initialise === #
 if task == 'adding':
@@ -28,15 +62,10 @@ elif task == 'memory':
 else:
     sys.exit('Unknown task', task)
 
-if plot_test:
-    #   each iteration contains n_batch training examples
-    #   we get test loss after every 50 iterations
-    scaling_factor = 50*BATCH_SIZE
-    plot_fname = task + '_' + str(T) + '_test.png'
+if plot_vali:
+    plot_fname = task + '/' + str(T) + '_vali.png'
 else:
-    #   we get train loss after every iteration
-    scaling_factor = BATCH_SIZE
-    plot_fname = task + '_' + str(T) + '_train.png'
+    plot_fname = task + '/' + str(T) + '_train.png'
 
 plot_fname = 'output/' + plot_fname
 print plot_fname
@@ -45,20 +74,20 @@ print plot_fname
 # (very deep dicts)
 traces = dict()
 for model in models:
-    trace_file = 'output/' + task + '_' + model + '_' + str(T) + '.trace_path.pk'
+    trace_file = 'output/' + task + '/' + model + '_' + str(T) + '.trace.pk'
     try:
         traces[model] = cPickle.load(open(trace_file))
         # check consistency
         assert traces[model]['time_steps'] == T
-        assert traces[model]['model'] == model
+#        assert traces[model]['model'] == model
         print 'Loaded', trace_file
     except IOError:
         print 'Missing:', trace_file
 
 # --- create plots --- #
-# test or train?
-if plot_test:
-    loss = 'test_loss'
+# vali or train?
+if plot_vali:
+    loss = 'vali_loss'
 else:
     loss = 'train_loss'
 
@@ -67,7 +96,16 @@ xmax = 0
 ymax = -1000
 ymin = 1000
 for (model, trace) in traces.iteritems():
-    n_train = len(trace[loss])
+    try:
+        batch_size = trace['batch_size']
+    except KeyError:
+        batch_size = 20 # probably
+    if plot_vali:
+        trace['scaling_factor'] =  50*batch_size
+    else:
+        trace['scaling_factor'] = batch_size
+        # TODO: finish fixing this
+    n_train = trace['scaling_factor']*len(trace[loss])
     if n_train > xmax:
         xmax = n_train
     train_max = np.nanmax(trace[loss])
@@ -77,17 +115,17 @@ for (model, trace) in traces.iteritems():
     if train_min < ymin:
         ymin = train_min
 
-xmax = scaling_factor*xmax
+ymax = 0.25
+xmax = xmax*1.7
 print 0, xmax
 print ymin, ymax
-#ymax = 1.0
-#ymin = -0.001
+ymin = -0.001
 
 plt.axis([0, xmax, ymin, ymax])
 # construct the arguments to plot
 data_series = dict()
 for model in traces.keys():
-    series_x = scaling_factor*np.arange(len(traces[model][loss]))
+    series_x = traces[model]['scaling_factor']*np.arange(len(traces[model][loss]))
     series_y = np.array(traces[model][loss])
     colour = colours[model]
     data_series[model], = plt.plot(series_x, series_y, colour, label=model, alpha=0.8)

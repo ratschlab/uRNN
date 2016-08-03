@@ -11,8 +11,12 @@ import tensorflow as tf
 import numpy as np
 import pdb
 
-from tensorflow.models.rnn import rnn
-from tensorflow.models.rnn.rnn_cell import RNNCell
+# tf 0.9
+#from tf.nn.rnn_cell import RNNCell
+
+# tf 0.7
+#from tensorflow.models.rnn import rnn
+#from tensorflow.models.rnn.rnn_cell import RNNCell
 from tensorflow.python.ops import variable_scope as vs
 
 from unitary import unitary
@@ -24,6 +28,7 @@ def times_diag(arg, state_size, scope=None):
     """
     Multiplication with a diagonal matrix of the form exp(i theta_j)
     """
+#    batch_size = arg.get_shape().as_list()[0]
     with vs.variable_scope(scope or "Times_Diag"):
         thetas = vs.get_variable("Thetas", 
                                  initializer=tf.constant(np.random.uniform(low=-np.pi, 
@@ -32,13 +37,14 @@ def times_diag(arg, state_size, scope=None):
                                                          dtype=tf.float32),
                                  dtype=tf.float32)
         # e(i theta)  = cos(theta) + i sin(theta)
-        diagonal = tf.complex(tf.cos(thetas), tf.sin(thetas))
-        # don't actually need to do matrix multiplication, since it's diagonal (so element-wise)
-    return tf.mul(arg, diagonal)
+        diagonal = tf.diag(tf.complex(tf.cos(thetas), tf.sin(thetas)))
+    return tf.matmul(arg, diagonal)
 
 def reflection(state, state_size, scope=None):
     """
     I do not entirely trust or believe the reflection operator in the theano version. :/
+    TODO: indeed, it is wrong, wrongish.
+    TODO: do the 'right' version.
     """
     # the reflections are initialised in a weird and tricky way: using initialize_matrix,
     # as if they are columns from a (2, state_size) matrix, so the range of random initialisation
@@ -95,6 +101,7 @@ def relu_mod(state, scope=None):
     (Equation 8 in http://arxiv.org/abs/1511.06464)
     """
     state_size = state.get_shape()[1]
+    batch_size = state.get_shape()[0]
     with vs.variable_scope(scope or "ReLU_mod"):
         # WARNING: complex_abs has no gradient registered in the docker version for some reason
         # [[ LookupError: No gradient defined for operation 'RNN/complex_RNN_99/ReLU_mod/ComplexAbs' (op type: ComplexAbs) ]]
@@ -104,7 +111,10 @@ def relu_mod(state, scope=None):
                                     initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(state_size)), 
                                                             dtype=tf.float32, 
                                                             shape=[state_size]))
-        rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0)
+                                    #        bias_tiled = tf.tile(bias_term, [1, batch_size])
+
+        rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5*tf.ones_like(modulus)), tf.zeros_like(modulus))
+                                    #rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0.0)
     return state * rescale
 
 def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
@@ -172,7 +182,7 @@ def linear(args, output_size, bias, bias_start=0.0,
     Raises:
         ValueError: if some of the arguments has unspecified or wrong shape.
   """
-    assert args
+    assert args is not None
     if not isinstance(args, (list, tuple)):
         args = [args]
 
@@ -260,18 +270,24 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
         cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
     elif cell_type == 'uRNN':
         cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
+    elif cell_type == 'ortho_tanhRNN':
+        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size)
     # split up the input so the RNN can accept it...
     inputs = [tf.squeeze(input_, [1])
             for input_ in tf.split(1, sequence_length, x)]
-    outputs, final_state = rnn.rnn(cell, inputs, initial_state=state_0)
+    # tf 0.7.0
+#    outputs, final_state = rnn.rnn(cell, inputs, initial_state=state_0)
+    # tf 0.9.0
+    outputs, final_state = tf.nn.rnn(cell, inputs, initial_state=state_0)
     return outputs
 
 # === cells ! === #
 # TODO: better name for this abstract class
-class steph_RNNCell(RNNCell):
+#class steph_RNNCell(RNNCell):      # tf 0.7.0
+class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
     def __init__(self, input_size, state_size, output_size, state_dtype):
         self._input_size = input_size
         self._state_size = state_size
@@ -335,7 +351,6 @@ class tanhRNNCell(steph_RNNCell):
             output = linear(state)
         """
         with vs.variable_scope(scope):
-            #new_state = tf.tanh(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition'))
             new_state = tf.tanh(linear([inputs], self._state_size, bias=True, scope='Linear/FoldIn') + linear([state], self._state_size, bias=False, scope='Linear/Transition'))
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
@@ -397,19 +412,17 @@ class complex_RNNCell(steph_RNNCell):
         """
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
-        inputs_complex = tf.complex(inputs, 0)
+        inputs_complex = tf.complex(inputs, tf.constant(0.0, dtype=inputs.dtype))          # tf 0.9.0
         with vs.variable_scope(scope):
             step1 = times_diag(state, self._state_size, scope='Diag/First')
-            step2 = tf.fft2d(step1, name='FFT')
-#            step2 = step1
+            step2 = tf.batch_fft(step1, name='FFT')
             step3 = reflection(step2, self._state_size, scope='Reflection/First')
             permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
-                                          initializer=tf.complex(np.random.permutation(np.eye(self._state_size)), 0),
+                                          initializer=tf.complex(np.random.permutation(np.eye(self._state_size, dtype=np.float32)), tf.constant(0.0, dtype=tf.float32)),
                                           trainable=False)
             step4 = tf.matmul(step3, permutation)
             step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-            step6 = tf.ifft2d(step5, name='InverseFFT')
-#            step6 = step5
+            step6 = tf.batch_ifft(step5, name='InverseFFT')
             step7 = reflection(step6, self._state_size, scope='Reflection/Second')
             step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
@@ -419,24 +432,48 @@ class complex_RNNCell(steph_RNNCell):
             intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + step8
             
             new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+#            new_state = intermediate_state
+
+            # TODO testing
+      #      new_state = step2
             
             real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
             output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
 class uRNNCell(steph_RNNCell):
-    def __call__(self, inputs, state, scope='uRNN'):
+    def __call__(self, inputs, state, scope='uRNN', split=True):
         """
         this unitary RNN shall be my one, once I figure it out I guess
         ... fun times ahead
+
+        split produces some different behaviour... if split, real/imag parameters are separate
         """
         # TODO: think about outputs
-        # grr, so much splitting into real and imag
-        inputs_complex = tf.complex(inputs, 0)
+        inputs_complex = tf.complex(inputs, 0.0)
         with vs.variable_scope(scope):
-            # probably using sigmoid?
-            new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
-            output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
-            # for now, output is modulus...
-            output = tf.sqrt(tf.real(output)**2 + tf.imag(output)**2)
+            if split:
+                # transform the hidden state
+                # these are possibly non-differentiable in tf, need to test :/
+                state_re = tf.real(state)
+                state_im = tf.imag(state)
+                Ustate = tf.complex(linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real'), linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary'))
+                # now as in the complex_RNN case
+                # (folding in the input data) 
+                foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
+                foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
+
+                intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + Ustate
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+#                new_state = tf.complex(tf.nn.relu(tf.real(intermediate_state)), tf.nn.relu(tf.imag(intermediate_state)))
+
+                real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
+                output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+            else:
+                raise NotImplementedError
+                # probably using sigmoid?
+                new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
+                output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
+                # for now, output is modulus...
+                output = tf.sqrt(tf.real(output)**2 + tf.imag(output)**2)
         return output, new_state
