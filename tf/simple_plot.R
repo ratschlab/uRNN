@@ -1,13 +1,20 @@
 library(ggplot2)
-
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 args<-commandArgs(TRUE)
 PLOT_TRAIN<-FALSE
 
 d<-args[1]
+#d<-20
 #identifier<-args[2]
 noise<-0.01
 
-fname_base<-paste0('output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('output/simple/lr_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('output/simple/nips/random_projections_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
 
@@ -17,10 +24,19 @@ data<-read.table(fname, header=T)
 print(levels(factor(data$rep)))
 data['rep']<-NULL
 data['method']<-NULL
+data['t']<-NULL
+data$experiment<-factor(data$experiment)
+print(levels(data$experiment))
+#data$experiment<-factor(data$experiment, labels=c("lie (basis) 0.0001", "lie (basis) 0.0002", "lie (basis) 0.0005", "lie 0.0001", "lie 0.0002", "lie 0.0005", "lie 0.001"))
+#data$experiment<-factor(data$experiment, labels=c("composition", "lie algebra", "lie algebra (basis)", "lie algebra (restricted)", "projection"))
+#data$experiment<-factor(data$experiment, labels=c("composition", "lie algebra", "lie algebra (basis)", "projection"))
 
-ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom") + ylim(0, 6)
-ggsave(gsub(".txt", ".png", fname))
 
+ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="right")  + ylim(0, 25)
+#+ ylim(0, 30) + xlim(0, 2e06)
+#+scale_colour_manual(values=gg_color_hue(5)[c(1, 2, 5)]) + scale_fill_manual(values=gg_color_hue(5)[c(1,2 , 5)])
+#$+ ylim(0, 5) + xlim(0, 1e06) + 
+ggsave(gsub(".txt", ".png", fname), width=6, height=4)
 # --- train --- # (copy pasta)
 if (PLOT_TRAIN){
     fname<-paste0(fname_base, 'train.txt')
@@ -33,11 +49,11 @@ if (PLOT_TRAIN){
 
 # --- print summary statistics about test --- #
 fname<-paste0(fname_base, 'test.txt')
-data<-read.table(fname, header=T)
+dtest<-read.table(fname, header=T)
 
-means<-aggregate(data$loss, by=list(data$experiment), FUN=mean)
+means<-aggregate(dtest$loss, by=list(dtest$experiment), FUN=mean)
 names(means)<-c("experiment", "mean")
-sems<-aggregate(data$loss, by=list(data$experiment), FUN=function(x) sd(x)/sqrt(length(x)))
+sems<-aggregate(dtest$loss, by=list(dtest$experiment), FUN=function(x) sd(x)/sqrt(length(x)))
 names(sems)<-c("experiment", "standard error")
 
 test_results<-merge(means, sems)
