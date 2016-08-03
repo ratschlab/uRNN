@@ -40,7 +40,7 @@ def times_diag(arg, state_size, scope=None):
         diagonal = tf.diag(tf.complex(tf.cos(thetas), tf.sin(thetas)))
     return tf.matmul(arg, diagonal)
 
-def reflection(state, state_size, scope=None):
+def reflection(state, state_size, scope=None, theano_reflection=False):
     """
     I do not entirely trust or believe the reflection operator in the theano version. :/
     TODO: indeed, it is wrong, wrongish.
@@ -61,38 +61,49 @@ def reflection(state, state_size, scope=None):
                                      initializer=tf.constant(np.random.uniform(low=-scale, high=scale, size=(state_size)),
                                                              dtype=tf.float32,
                                                              shape=[state_size, 1]))
-        # NOTE: I am *directly copying* what they do in the theano code (inasmuch as one can in TF),
-        #       (s/input/state/g)
-        # even though I think the maths might be incorrect, see this issue: https://github.com/amarshah/complex_RNN/issues/2
-        # the function is times_reflection in models.py (not this file, hah hah hah!)
-        #
-        # Otherwise we could do this 'simply' using complex numbers.
 
-        state_re = tf.real(state)
-        state_im = tf.imag(state)
-        
-        vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
+        if theano_reflection:
+            # NOTE: I am *directly copying* what they do in the theano code (inasmuch as one can in TF),
+            #       (s/input/state/g)
+            # even though I think the maths might be incorrect, see this issue: https://github.com/amarshah/complex_RNN/issues/2
+            # the function is times_reflection in models.py (not this file, hah hah hah!)
+            #
+            # Otherwise we could do this 'simply' using complex numbers.
 
-        state_re_reflect_re = tf.matmul(state_re, reflect_re)
-        state_re_reflect_im = tf.matmul(state_re, reflect_im)
-        state_im_reflect_re = tf.matmul(state_im, reflect_re)
-        state_im_reflect_im = tf.matmul(state_im, reflect_im)
+            state_re = tf.real(state)
+            state_im = tf.imag(state)
+            
+            vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
 
-        # tf.matmul with transposition is the same as T.outer
-        # we need something of the shape [batch_size, state_size] in the end
-        a = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_re, transpose_b=True)
-        b = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_im, transpose_b=True)
-        c = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_im, transpose_b=True)
-        d = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_re, transpose_b=True)
+            state_re_reflect_re = tf.matmul(state_re, reflect_re)
+            state_re_reflect_im = tf.matmul(state_re, reflect_im)
+            state_im_reflect_re = tf.matmul(state_im, reflect_re)
+            state_im_reflect_im = tf.matmul(state_im, reflect_im)
 
-        # the thing we return is:
-        # return_re = state_re - (2/vstarv)(d - c)
-        # return_im = state_im - (2/vstarv)(a + b)
+            # tf.matmul with transposition is the same as T.outer
+            # we need something of the shape [batch_size, state_size] in the end
+            a = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_re, transpose_b=True)
+            b = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_im, transpose_b=True)
+            c = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_im, transpose_b=True)
+            d = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_re, transpose_b=True)
 
-        new_state_re = state_re - (2.0 / vstarv) * (d - c)
-        new_state_im = state_im - (2.0 / vstarv) * (a + b)
-        new_state = tf.complex(new_state_re, new_state_im)
+            # the thing we return is:
+            # return_re = state_re - (2/vstarv)(d - c)
+            # return_im = state_im - (2/vstarv)(a + b)
 
+            new_state_re = state_re - (2.0 / vstarv) * (d - c)
+            new_state_im = state_im - (2.0 / vstarv) * (a + b)
+            new_state = tf.complex(new_state_re, new_state_im)
+        else:
+            vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
+            prefactor = tf.complex(2.0/vstarv, 0.0)
+
+            v = tf.complex(reflect_re, reflect_im)
+            v_star = tf.conj(v)
+
+            vx = tf.matmul(state, tf.reshape(v_star, [-1, 1]))
+            # SO MANY TRANSPOSE
+            new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
     return new_state
 
 def relu_mod(state, scope=None):
@@ -434,8 +445,6 @@ class complex_RNNCell(steph_RNNCell):
             new_state = relu_mod(intermediate_state, scope='ReLU_mod')
 #            new_state = intermediate_state
 
-            # TODO testing
-      #      new_state = step2
             
             real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
             output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
