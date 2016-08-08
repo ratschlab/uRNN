@@ -24,21 +24,42 @@ from unitary import unitary
 # === functions to help with implementing the theano version === #
 # from http://arxiv.org/abs/1511.06464
 
-def times_diag(arg, state_size, scope=None):
+def times_diag(arg, state_size, scope=None, real=False):
     """
     Multiplication with a diagonal matrix of the form exp(i theta_j)
     """
 #    batch_size = arg.get_shape().as_list()[0]
     with vs.variable_scope(scope or "Times_Diag"):
-        thetas = vs.get_variable("Thetas", 
-                                 initializer=tf.constant(np.random.uniform(low=-np.pi, 
-                                                                           high=np.pi, 
-                                                                           size=state_size), 
-                                                         dtype=tf.float32),
-                                 dtype=tf.float32)
-        # e(i theta)  = cos(theta) + i sin(theta)
-        diagonal = tf.diag(tf.complex(tf.cos(thetas), tf.sin(thetas)))
-    return tf.matmul(arg, diagonal)
+        if not real:
+            thetas = vs.get_variable("Thetas", 
+                                     initializer=tf.constant(np.random.uniform(low=-np.pi, 
+                                                                               high=np.pi, 
+                                                                               size=state_size), 
+                                                             dtype=tf.float32),
+                                     dtype=tf.float32)
+            # e(i theta)  = cos(theta) + i sin(theta)
+            diagonal = tf.diag(tf.complex(tf.cos(thetas), tf.sin(thetas)))
+            result = tf.matmul(arg, diagonal)
+        else:
+            # state is [state_re, state_im], remember
+            hidden_size = state_size/2
+            thetas = vs.get_variable("Thetas", 
+                                     initializer=tf.constant(np.random.uniform(low=-np.pi, 
+                                                                               high=np.pi, 
+                                                                               size=hidden_size), 
+                                                             dtype=tf.float32),
+                                     dtype=tf.float32)
+            diag_re = tf.diag(tf.cos(thetas))
+            diag_im = tf.diag(tf.sin(thetas))
+            
+            state_re = tf.slice(state, [0, 0], [-1, hidden_size])
+            state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+
+            intermediate_re = tf.matmul(diag_re, state_re) - tf.matmul(diag_im, state_im)
+            intermediate_im = tf.matmul(diag_re, state_im) + tf.matmul(diag_im, state_re)
+
+            result = tf.concat(1, [intermediate_re, intermediate_im])
+    return result
 
 def reflection(state, state_size, scope=None, theano_reflection=False):
     """
@@ -429,7 +450,7 @@ class LSTMCell(steph_RNNCell):
         return output, new_state
 
 class complex_RNNCell(steph_RNNCell):
-    def __call__(self, inputs, state, scope='complex_RNN'):
+    def __call__(self, inputs, state, scope='complex_RNN', real=False):
         """
         (copying their naming conventions, mkay)
         """
@@ -437,29 +458,35 @@ class complex_RNNCell(steph_RNNCell):
         # (for now:) cast inputs to complex
         inputs_complex = tf.complex(inputs, tf.constant(0.0, dtype=inputs.dtype))          # tf 0.9.0
         with vs.variable_scope(scope):
-            step1 = times_diag(state, self._state_size, scope='Diag/First')
-            step2 = tf.batch_fft(step1, name='FFT')
-            step3 = reflection(step2, self._state_size, scope='Reflection/First')
-            permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
-                                          initializer=tf.complex(np.random.permutation(np.eye(self._state_size, dtype=np.float32)), tf.constant(0.0, dtype=tf.float32)),
-                                          trainable=False)
-            step4 = tf.matmul(step3, permutation)
-            step5 = times_diag(step4, self._state_size, scope='Diag/Second')
-            step6 = tf.batch_ifft(step5, name='InverseFFT')
-            step7 = reflection(step6, self._state_size, scope='Reflection/Second')
-            step8 = times_diag(step7, self._state_size, scope='Diag/Third')
+            if not real:
+                step1 = times_diag(state, self._state_size, scope='Diag/First')
+                step2 = tf.batch_fft(step1, name='FFT')
+                step3 = reflection(step2, self._state_size, scope='Reflection/First')
+                permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
+                                              initializer=tf.complex(np.random.permutation(np.eye(self._state_size, dtype=np.float32)), tf.constant(0.0, dtype=tf.float32)),
+                                              trainable=False)
+                step4 = tf.matmul(step3, permutation)
+                step5 = times_diag(step4, self._state_size, scope='Diag/Second')
+                step6 = tf.batch_ifft(step5, name='InverseFFT')
+                step7 = reflection(step6, self._state_size, scope='Reflection/Second')
+                step8 = times_diag(step7, self._state_size, scope='Diag/Third')
 
-            # (folding in the input data) 
-            foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
-            foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
-            intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + step8
-            
-            new_state = relu_mod(intermediate_state, scope='ReLU_mod')
-#            new_state = intermediate_state
+                # (folding in the input data) 
+                foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
+                foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
+                intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + step8
+                
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+    #            new_state = intermediate_state
 
-            
-            real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
-            output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+                
+                real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
+                output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+            else:
+                # state is [state_re, state_im]
+                step1 = times_diag(state, self._state_size, scope='Diag/First', real=True)
+                step2 = tf.batch_fft(step1, name='FFT')
+                raise NotImplementedError
         return output, new_state
 
 class uRNNCell(steph_RNNCell):
