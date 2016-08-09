@@ -5,7 +5,7 @@ gg_color_hue <- function(n) {
     hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-d<-6
+d<-12
 noise<-0.01
 
 fname_base<-paste0('output/simple/random_d', d, '_noise', noise, '_bn20_nb50000_')
@@ -17,9 +17,15 @@ data<-read.table(fname, header=T)
 print(levels(factor(data$rep)))
 data['method']<-NULL
 print(levels(factor(data$experiment)))
-data['experiment']<-factor(data$experiment, labels=c('full', 'J=16', 'J=25', 'J=36', 'J=4', 'J=9'))
-print(levels(data$experiment))
-data$experiment<-factor(data$experiment, levels=c('J=4', 'J=9', 'J=16', 'J=25', 'J=36', 'full'))
+if (d==6){
+    data['experiment']<-factor(data$experiment, labels=c('full', 'J=16', 'J=25', 'J=36', 'J=4', 'J=9'))
+    data$experiment<-factor(data$experiment, levels=c('J=4', 'J=9', 'J=16', 'J=25', 'J=36', 'full'))
+} else if (d==12){
+    data['experiment']<-factor(data$experiment, labels=c('full', 'J=144', 'J=25', 'J=49', 'J=81', 'J=9'))
+    data$experiment<-factor(data$experiment, levels=c('J=9', 'J=25', 'J=49', 'J=81', 'J=144', 'full'))
+    # cull rep 5 (didn't finish for most experiments)
+    data <- subset(data, rep != 5)
+}
 print(levels(data$experiment))
 
 # --- get an average time column --- #
@@ -36,21 +42,32 @@ data_aug['t']<-NULL
 data_aug['rep']<-NULL
 
 # --- as function of time --- #
-ggplot(data_aug, aes(x=ave_time, y=loss, group=experiment, color=experiment, fill=experiment)) + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom="smooth", alpha=0.07) + coord_cartesian(ylim=c(0, 5.5), xlim=c(0, 1500)) + ylab("validation set loss") + xlab("time (s) (average)")
+print("as a function of time...")
+
+ggplot(data_aug, aes(x=ave_time, y=loss, group=experiment, color=experiment, fill=experiment)) + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom="smooth", alpha=0.07) + ylab("validation set loss") + xlab("time (s) (average)") 
+#+ coord_cartesian(ylim=c(0, 5.5), xlim=c(0, 1500))             # d=6
 ggsave(gsub(".txt", "_time.png", fname), width=4.5, height=3)
 ggsave(gsub(".txt", "_time.pdf", fname), width=4.5, height=3)
 
-ggplot(data_aug, aes(x=ave_time, y=loss, group=experiment, color=experiment, fill=experiment)) + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom="smooth", alpha=0.07) + coord_cartesian(ylim=c(0, 2), xlim=c(0, 500)) + ylab("validation set loss") + xlab("time (s) (average)")
+print("... now zoomed in")
+ggplot(data_aug, aes(x=ave_time, y=loss, group=experiment, color=experiment, fill=experiment)) + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom="smooth", alpha=0.07) + ylab("validation set loss") + xlab("time (s) (average)")  + coord_cartesian(ylim=c(0, 20.0), xlim=c(0, 5000))        # d = 12
+#+ coord_cartesian(ylim=c(0, 2), xlim=c(0, 500))                # d = 6
 ggsave(gsub(".txt", "_time.zoom.png", fname), width=4.5, height=3)
 ggsave(gsub(".txt", "_time.zoom.pdf", fname), width=4.5, height=3)
+
+
 # --- as a function of training examples --- #
+print("as a function of traninig examples...")
 data['rep']<-NULL
 
-ggplot(data, aes(x=training_examples/1e6, y=loss, colour=experiment, group=experiment, fill=experiment)) +  xlab("training examples seen (millions)") + ylab("validation set loss") + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom = "smooth", alpha=0.1) + coord_cartesian(ylim=c(0, 7), xlim=c(-0.005, 2))
+ggplot(data, aes(x=training_examples/1e6, y=loss, colour=experiment, group=experiment, fill=experiment)) +  xlab("training examples seen (millions)") + ylab("validation set loss") + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom = "smooth", alpha=0.1)
+#+ coord_cartesian(ylim=c(0, 7), xlim=c(-0.005, 2))             # d = 6
 ggsave(gsub(".txt", ".png", fname), width=4.5, height=3)
 ggsave(gsub(".txt", ".pdf", fname), width=4.5, height=3)
 # zoom version
-ggplot(data, aes(x=training_examples/1e6, y=loss, colour=experiment, group=experiment, fill=experiment)) +  xlab("training examples seen (millions)") + ylab("validation set loss") + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom = "smooth", alpha=0.2)  + coord_cartesian(xlim=c(0, 0.3), ylim=c(0, 7))
+print("... now zoomed in")
+ggplot(data, aes(x=training_examples/1e6, y=loss, colour=experiment, group=experiment, fill=experiment)) +  xlab("training examples seen (millions)") + ylab("validation set loss") + theme_bw() + stat_summary(fun.data = "mean_cl_boot", geom = "smooth", alpha=0.2) + coord_cartesian(xlim=c(0, 1), ylim=c(0, 20))
+#+ coord_cartesian(xlim=c(0, 0.3), ylim=c(0, 7))                # d = 6
 ggsave(gsub(".txt", ".zoom.png", fname), width=4.5, height=3)
 ggsave(gsub(".txt", ".zoom.pdf", fname), width=4.5, height=3)
 
