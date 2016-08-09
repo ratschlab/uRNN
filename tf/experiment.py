@@ -252,7 +252,11 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # we can use the eigtrick, lambdas is defined...
                     if model == 'uRNN':
                         # extract dcost/dU terms from tf
+                        # TODO DEBUG dcost_dU_re and dcost_dU_im are MASSIVE
                         dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
+                        # TODO MORE DEBUG
+                        gradz_U, gradz_nonU = session.run([g_and_v_U[0][0], g_and_v_nonU[0][0]], {x:batch_x, y:batch_y})
+                        pdb.set_trace()
                         # calculate gradients of lambdas using eigenvalue decomposition trick
                         U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
                         # calculate train cost, update variables
@@ -268,12 +272,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         # calculate train cost, update variables
                         train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
                
-                    # YOLO
-                    print 'sup'
-                    print lambdas
-                    print dlambdas
-                    # DEYOLO
-                    # TEST
+                    # TODO TEST
                     COMPARE_NUMERICAL_GRADIENT = True
                     if COMPARE_NUMERICAL_GRADIENT:
                         # checking numerical gradients (EXPENSIVE)
@@ -307,6 +306,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                             lambda_index += 1
                         # now compare with dlambdas
                         print np.mean(dlambdas - numerical_dcost_dlambdas)
+                        pdb.set_trace()
                     # DETEST
                 else:
                     # TODO testing nans
@@ -366,16 +366,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
             test_cost = session.run(cost, {x: test_data.x, y: test_data.y})
             print 'Performance on test set:', test_cost
 
-def runmo(model):
-    """ wrapper script because that's how lazy I am """
-    main(model=model)
-    return True
-
-
 # === parse inputs === #
 parser = argparse.ArgumentParser(description='Run task of long-term memory capacity of RNN.')
 parser.add_argument('--task', type=str, help='which task? adding/memory', 
-                    default='adding')
+                    default='memory')
 parser.add_argument('--batch_size', type=int, 
                     default=20)
 parser.add_argument('--state_size', type=int, help='size of internal state', 
@@ -383,7 +377,7 @@ parser.add_argument('--state_size', type=int, help='size of internal state',
 parser.add_argument('--T', type=int, help='memory time-scale or addition input length', 
                     default=100)
 parser.add_argument('--model', type=str, help='which RNN model to use?', 
-                    default='tanhRNN')
+                    default='complex_RNN')
 parser.add_argument('--data_path', type=str, help='path to dict of ExperimentData objects (if empty, generate data)', 
                     default='')
 parser.add_argument('--learning_rate', type=float, help='prefactor of gradient in gradient descent parameter update', 
@@ -398,11 +392,32 @@ if options['model'] in {'complex_RNN', 'ortho_tanhRNN', 'uRNN'}:
 else:
     options['gradient_clipping'] = True
 
-if options['data_path'] == '' and options['T']== 100:
-    if options['task'] == 'adding':
-        options['data_path'] = '/tf_data/input/adding/1465289739_100.pk'
-    elif options['task'] == 'memory':
-        pass
+# --- load pre-calculated data --- #
+T = options['T']
+if options['task'] == 'adding':
+    if T == 100:
+        options['data_path'] = 'input/adding/1470744790_100.pk'
+    elif T == 200:
+        options['data_path'] = 'input/adding/1470744860_200.pk'
+    elif T == 400:
+        options['data_path'] = 'input/adding/1470744994_400.pk'
+    elif T == 750:
+        options['data_path'] = 'input/adding/1470745056_750.pk'
+    else:
+        options['data_path'] = ''
+elif options['task'] == 'memory':
+    if T == 100:
+        options['data_path'] = 'input/memory/1470766867_100.pk'
+    elif T == 200:
+        options['data_path'] = 'input/memory/1470767064_200.pk'
+    elif T == 300:
+        options['data_path'] = 'input/memory/1470767409_300.pk'
+    elif T == 500:
+        options['data_path'] = 'input/memory/1470767936_500.pk'
+    else:
+        options['data_path'] = ''
+else:
+    raise ValueError(options['task'])
 
 # === suggestions (param values from paper) === #
 print 'Suggested state sizes:'
