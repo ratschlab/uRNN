@@ -465,6 +465,10 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
     """
     Given dcost/dU, get dcost/dlambdas
     Using... linear algebra!
+
+    NOTE: the TF implementation actually works with U transpose.
+
+    So dcost_dU is transposed, and the thing we return shall also be transposed.
     """
     n = dcost_dU_re.shape[0]
     assert len(lambdas) == n*n or len(lambdas) == n*(n-1)/2
@@ -501,7 +505,8 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
                     V[s, r] = (expw[s] - expw[r])*G[s, r]/(w[s] - w[r])
             grad = np.dot(np.dot(v, V), vdag)
             dU_dlambda = grad
-            delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
+            #delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
+            delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
             dlambdas[i] = delta
     else:
         # woooo
@@ -510,6 +515,7 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
         M[xrange(n), xrange(n)] = expw
         # k
         lambda_index = 0
+        # damn a n^2 calculation? gross
         for r in xrange(n):
             for s in xrange(n):
                 if r > s:
@@ -527,7 +533,8 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
                         WTW = 1j*(np.outer(vdag[:, s], v[r, :]) + np.outer(vdag[:, r], v[s, :]))
                 V = WTW*M
                 dU_dlambda = np.dot(np.dot(v, V), vdag)
-                delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
+#                delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
+                delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
                 dlambdas[lambda_index] = delta
                 lambda_index += 1
 
@@ -535,5 +542,6 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
     lambdas += learning_rate*dlambdas
     
     # having updated the lambdas, get new U
-    U_new = expm(lie_algebra_element(n, lambdas))
+    #U_new = expm(lie_algebra_element(n, lambdas))
+    U_new = expm(lie_algebra_element(n, lambdas)).T
     return np.real(U_new), np.imag(U_new), dlambdas
