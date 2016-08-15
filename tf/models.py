@@ -88,8 +88,6 @@ def reflection(state, state_size, scope=None, theano_reflection=False):
             #       (s/input/state/g)
             # even though I think the maths might be incorrect, see this issue: https://github.com/amarshah/complex_RNN/issues/2
             # the function is times_reflection in models.py (not this file, hah hah hah!)
-            #
-            # Otherwise we could do this 'simply' using complex numbers.
 
             state_re = tf.real(state)
             state_im = tf.imag(state)
@@ -116,6 +114,7 @@ def reflection(state, state_size, scope=None, theano_reflection=False):
             new_state_im = state_im - (2.0 / vstarv) * (a + b)
             new_state = tf.complex(new_state_re, new_state_im)
         else:
+            #TODO optimise I guess (SO MANY TRANSPOSE)
             vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
             prefactor = tf.complex(2.0/vstarv, 0.0)
 
@@ -123,7 +122,6 @@ def reflection(state, state_size, scope=None, theano_reflection=False):
             v_star = tf.conj(v)
 
             vx = tf.matmul(state, tf.reshape(v_star, [-1, 1]))
-            # SO MANY TRANSPOSE
             new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
     return new_state
 
@@ -312,8 +310,7 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     elif cell_type == 'complex_RNN':
         cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
     elif cell_type == 'uRNN':
-        #cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
-        cell = uRNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
+        cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
     elif cell_type == 'ortho_tanhRNN':
         cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     else: 
@@ -498,7 +495,6 @@ class uRNNCell(steph_RNNCell):
         split produces some different behaviour... if split, real/imag parameters are separate
         """
         # TODO: think about outputs
-        inputs_complex = tf.complex(inputs, 0.0)
         with vs.variable_scope(scope):
             if real_valued:
                 # this means all the variables etc. are real-valued, we don't need to deal with complex numbers at all
@@ -506,34 +502,48 @@ class uRNNCell(steph_RNNCell):
 
                 # so, the state will be [real; imaginary]
                 raise NotImplementedError
-
             if split:
                 # transform the hidden state
                 # these are possibly non-differentiable in tf, need to test :/
-   #             state_re = tf.real(state)
-#                state_im = tf.imag(state)
+                state_re = tf.real(state)
+                state_im = tf.imag(state)
+
+                Ustate_re = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real')
+                Ustate_im = linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary')
 #                Ustate = tf.complex(linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real'), linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary'))
+
 # TODO messing around, making the state real (first and second halfs...)
-                hidden_size = self._state_size/2
-                state_re = tf.slice(state, [0, 0], [-1, hidden_size])
-                state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
-                Ustate = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real') +  linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary')
+#                hidden_size = self._state_size/2
+#                state_re = tf.slice(state, [0, 0], [-1, hidden_size])
+#                state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+#                Ustate = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real') +  linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary')
 
                 # now as in the complex_RNN case
                 # (folding in the input data) 
                 foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
                 foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
 
-    # TODO messing around
-#                intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + Ustate
+                intermediate_re = foldin_re + Ustate_re
+                intermediate_im = foldin_im + Ustate_im
+
+    # messing with relus right now
+                new_state_re = tf.nn.relu(intermediate_re)
+                new_state_im = tf.nn.relu(intermediate_im)
+                new_state = tf.complex(new_state_re, new_state_im)
+
+#                intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + Ustate  
+
+#                new_state = intermediate_state
 #                new_state = relu_mod(intermediate_state, scope='ReLU_mod')
-                new_state = foldin_re + foldin_im + Ustate          # wat
 #                new_state = tf.complex(tf.nn.relu(tf.real(intermediate_state)), tf.nn.relu(tf.imag(intermediate_state)))
 
-                real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
+#                real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
+                real_state = tf.concat(1, [new_state_re, new_state_im])
                 output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+#                output = linear(tf.real(new_state), self._output_size, bias=True, scope='Linear/Output')
             else:
                 raise NotImplementedError
+                inputs_complex = tf.complex(inputs, 0.0)
                 # probably using sigmoid?
                 new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
                 output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
