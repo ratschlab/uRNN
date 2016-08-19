@@ -24,7 +24,7 @@ from unitary import unitary
 # === functions to help with implementing the theano version === #
 # from http://arxiv.org/abs/1511.06464
 
-def times_diag(arg, state_size, scope=None, real=False):
+def times_diag(arg, state_size, scope=None, real=False, split=False):
     """
     Multiplication with a diagonal matrix of the form exp(i theta_j)
     """
@@ -52,16 +52,18 @@ def times_diag(arg, state_size, scope=None, real=False):
             diag_re = tf.diag(tf.cos(thetas))
             diag_im = tf.diag(tf.sin(thetas))
             
-            state_re = tf.slice(state, [0, 0], [-1, hidden_size])
-            state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+            state_re = tf.slice(arg, [0, 0], [-1, hidden_size])
+            state_im = tf.slice(arg, [0, hidden_size], [-1, hidden_size])
 
-            intermediate_re = tf.matmul(diag_re, state_re) - tf.matmul(diag_im, state_im)
-            intermediate_im = tf.matmul(diag_re, state_im) + tf.matmul(diag_im, state_re)
+            intermediate_re = tf.matmul(state_re, diag_re) - tf.matmul(state_im, diag_im)
+            intermediate_im = tf.matmul(state_im, diag_re) + tf.matmul(state_re, diag_im)
 
             result = tf.concat(1, [intermediate_re, intermediate_im])
+            if split:
+                result = intermediate_re, intermediate_im
     return result
 
-def reflection(state, state_size, scope=None, theano_reflection=False):
+def reflection(state, state_size, scope=None, theano_reflection=False, real=False, split=False):
     """
     I do not entirely trust or believe the reflection operator in the theano version. :/
     TODO: indeed, it is wrong, wrongish.
@@ -83,7 +85,33 @@ def reflection(state, state_size, scope=None, theano_reflection=False):
                                                              dtype=tf.float32,
                                                              shape=[state_size, 1]))
 
-        if theano_reflection:
+        if real:
+            # operation before this is fft, so...
+            state_re = tf.real(state)
+            state_im = tf.imag(state)
+            
+            vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
+
+            state_re_reflect_re = tf.matmul(state_re, reflect_re)
+            state_re_reflect_im = tf.matmul(state_re, reflect_im)
+            state_im_reflect_re = tf.matmul(state_im, reflect_re)
+            state_im_reflect_im = tf.matmul(state_im, reflect_im)
+
+            # tf.matmul with transposition is the same as T.outer
+            # we need something of the shape [batch_size, state_size] in the end
+            a = tf.matmul(state_re_reflect_re + state_im_reflect_im, reflect_re, transpose_b=True)
+            b = tf.matmul(state_im_reflect_re - state_re_reflect_im, reflect_im, transpose_b=True)
+            c = tf.matmul(state_im_reflect_re - state_re_reflect_im, reflect_re, transpose_b=True)
+            d = tf.matmul(state_re_reflect_re + state_im_reflect_im, reflect_im, transpose_b=True)
+
+            new_state_re = state_re - (2.0 / vstarv) * (a - b)
+            new_state_im = state_im - (2.0 / vstarv) * (c + d)
+            if split:
+                return new_state_re, new_state_im
+            else:
+                return tf.concat(1, [new_state_re, new_state_im])
+
+        elif theano_reflection:
             # NOTE: I am *directly copying* what they do in the theano code (inasmuch as one can in TF),
             #       (s/input/state/g)
             # even though I think the maths might be incorrect, see this issue: https://github.com/amarshah/complex_RNN/issues/2
@@ -113,6 +141,7 @@ def reflection(state, state_size, scope=None, theano_reflection=False):
             new_state_re = state_re - (2.0 / vstarv) * (d - c)
             new_state_im = state_im - (2.0 / vstarv) * (a + b)
             new_state = tf.complex(new_state_re, new_state_im)
+            return new_state
         else:
             #TODO optimise I guess (SO MANY TRANSPOSE)
             vstarv = tf.reduce_sum(reflect_re**2 + reflect_im**2)
@@ -123,7 +152,7 @@ def reflection(state, state_size, scope=None, theano_reflection=False):
 
             vx = tf.matmul(state, tf.reshape(v_star, [-1, 1]))
             new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
-    return new_state
+            return new_state
 
 def relu_mod(state, scope=None, real=False):
     """
@@ -149,12 +178,12 @@ def relu_mod(state, scope=None, real=False):
         else:
             # state is [state_re, state_im]
             modulus = tf.reduce_sum(state**2)
-            hidden_size =state_size/2
+            hidden_size = state_size/2
             bias_re = vs.get_variable("Bias", dtype=tf.float32, 
                                       initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(hidden_size)), 
                                                               dtype=tf.float32, 
                                                               shape=[hidden_size]))
-            bias_term = tf.concat(1, [bias_re, tf.zeros_like(bias_re)])
+            bias_term = tf.concat(0, [bias_re, tf.zeros_like(bias_re)])
             rescale = tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5*tf.ones_like(modulus) )
     return state * rescale
 
@@ -203,7 +232,7 @@ def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
 
 # === more generic functions === #
 def linear(args, output_size, bias, bias_start=0.0, 
-           scope=None, identity=-1, dtype=tf.float32):
+           scope=None, identity=-1, dtype=tf.float32, init_val=None):
     """
     variant of linear from tensorflow/python/ops/rnn_cell
     ... variant so I can specify the initialiser!
@@ -217,6 +246,7 @@ def linear(args, output_size, bias, bias_start=0.0,
         scope:          VariableScope for the created subgraph; defaults to "Linear".
         identity:       which matrix corresponding to inputs should be initialised to identity?
         dtype:          data type of linear operators
+        init_val:       optional matrix to use as fixed initialiser
     Returns:
         A 2D Tensor with shape [batch x output_size] equal to
         sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
@@ -242,7 +272,10 @@ def linear(args, output_size, bias, bias_start=0.0,
 
     # Now the computation.
     with vs.variable_scope(scope or "Linear"):
-        matrix = vs.get_variable("Matrix", dtype=dtype, initializer=fixed_initializer(n_in_list, output_size, identity, dtype))
+        if init_val is None:
+            matrix = vs.get_variable("Matrix", dtype=dtype, initializer=fixed_initializer(n_in_list, output_size, identity, dtype))
+        else:
+            matrix = vs.get_variable("Matrix", dtype=dtype, initializer=tf.constant(init_val, dtype=dtype))
         if len(args) == 1:
             res = tf.matmul(args[0], matrix)
         else:
@@ -299,7 +332,7 @@ def linear_complex(arg, output_size, bias, bias_start=0.0,
 
 # === RNNs ! === #
 
-def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
+def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init_re=None, init_im=None):
     batch_size = tf.shape(x)[0]
     if cell_type == 'tanhRNN':
         cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
@@ -308,11 +341,13 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
     elif cell_type == 'LSTM':
         cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
     elif cell_type == 'complex_RNN':
-        cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
+        #cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
+        cell = complex_RNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=tf.float32)
     elif cell_type == 'uRNN':
-        cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
+        #cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64, init_re=init_re, init_im=init_im)
+        cell = uRNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype, init_re=init_re, init_im=init_im)
     elif cell_type == 'ortho_tanhRNN':
-        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
+        cell = tanhRNNCell(inpnt_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size)
@@ -329,11 +364,14 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length):
 # TODO: better name for this abstract class
 #class steph_RNNCell(RNNCell):      # tf 0.7.0
 class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
-    def __init__(self, input_size, state_size, output_size, state_dtype):
+    def __init__(self, input_size, state_size, output_size, state_dtype, 
+                 init_re=None, init_im=None):
         self._input_size = input_size
         self._state_size = state_size
         self._output_size = output_size
         self._state_dtype = state_dtype
+        self._init_re = init_re
+        self._init_im = init_im
 
     @property
     def input_size(self):
@@ -447,18 +485,18 @@ class LSTMCell(steph_RNNCell):
         return output, new_state
 
 class complex_RNNCell(steph_RNNCell):
-    def __call__(self, inputs, state, scope='complex_RNN', real=False):
+    def __call__(self, inputs, state, scope='complex_RNN', real=True):
         """
         (copying their naming conventions, mkay)
         """
         # TODO: set up data types at time of model selection
         # (for now:) cast inputs to complex
-        inputs_complex = tf.complex(inputs, tf.constant(0.0, dtype=inputs.dtype))          # tf 0.9.0
         with vs.variable_scope(scope):
             if not real:
                 step1 = times_diag(state, self._state_size, scope='Diag/First')
                 step2 = tf.batch_fft(step1, name='FFT')
-                step3 = reflection(step2, self._state_size, scope='Reflection/First')
+#                step3 = reflection(step2, self._state_size, scope='Reflection/First')
+                step3 = step2
                 permutation = vs.get_variable("Permutation", dtype=tf.complex64, 
                                               initializer=tf.complex(np.random.permutation(np.eye(self._state_size, dtype=np.float32)), tf.constant(0.0, dtype=tf.float32)),
                                               trainable=False)
@@ -467,23 +505,52 @@ class complex_RNNCell(steph_RNNCell):
                 step6 = tf.batch_ifft(step5, name='InverseFFT')
                 step7 = reflection(step6, self._state_size, scope='Reflection/Second')
                 step8 = times_diag(step7, self._state_size, scope='Diag/Third')
+                step1 = state
 
                 # (folding in the input data) 
                 foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
                 foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
                 intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + step8
+#                intermediate_re = foldin_re + tf.real(step8)
+#                intermediate_im = foldin_im + tf.imag(step8)
+#                intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+#                new_state_real = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
                 
                 new_state = relu_mod(intermediate_state, scope='ReLU_mod')
-    #            new_state = intermediate_state
+#                new_state = intermediate_state
 
                 
                 real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
                 output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+#                output = linear(new_state_real, self._output_size, bias=True, scope='Linear/Output')
+
+#                new_state_re = tf.slice(new_state_real, [0, 0], [-1, self._state_size])
+#                new_state_im = tf.slice(new_state_real, [0, self._state_size], [-1, self._state_size])
+#                new_state = tf.complex(new_state_re, new_state_im)
             else:
                 # state is [state_re, state_im]
-                step1 = times_diag(state, self._state_size, scope='Diag/First', real=True)
-                step2 = tf.batch_fft(step1, name='FFT')
-                raise NotImplementedError
+                step1_re, step1_im = times_diag(state, self._state_size, scope='Diag/First', real=True, split=True)             # gradient is fine
+                step2 = tf.batch_fft(tf.complex(step1_re, step1_im), name='FFT')            # gradient looks ok
+                step3_re, step3_im = reflection(step2, self._state_size/2, scope='Reflection/First', real=True, split=True)      # gradient looks ok, but is it giving the right reflection formula?
+                permutation = vs.get_variable("Permutation", dtype=tf.float32, 
+                                              initializer=tf.constant(np.random.permutation(np.eye(self._state_size/2, dtype=np.float32))),
+                                              trainable=False)
+                step4_re = tf.matmul(step3_re, permutation)
+                step4_im = tf.matmul(step3_im, permutation)
+                step4 = tf.concat(1, [step4_re, step4_im])
+                step5_re, step5_im = times_diag(step4, self._state_size, scope='Diag/Second', real=True, split=True)
+                step6 = tf.batch_ifft(tf.complex(step5_re, step5_im), name='FFT')
+                step7 = reflection(step6, self._state_size/2, scope='Reflection/Second', real=True, split=False)
+                step8 = times_diag(step7, self._state_size, scope='Diag/Third', real=True, split=False)
+                
+                foldin = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
+                
+                intermediate_state = step8 + foldin
+
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+                
+                output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
+
         return output, new_state
 
 class uRNNCell(steph_RNNCell):
@@ -505,31 +572,43 @@ class uRNNCell(steph_RNNCell):
             if split:
                 # transform the hidden state
                 # these are possibly non-differentiable in tf, need to test :/
-                state_re = tf.real(state)
-                state_im = tf.imag(state)
+#                state_re = tf.real(state)
+#                state_im = tf.imag(state)
+                
+                hidden_size = self._state_size/2
+                state_re = tf.slice(state, [0, 0], [-1, hidden_size])
+                state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
 
-                Ustate_re = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real')
-                Ustate_im = linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary')
+                Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
+                Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+#                Ustate_re = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
+#                Ustate_im = linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+
 #                Ustate = tf.complex(linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real'), linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary'))
 
 # TODO messing around, making the state real (first and second halfs...)
-#                hidden_size = self._state_size/2
-#                state_re = tf.slice(state, [0, 0], [-1, hidden_size])
-#                state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
 #                Ustate = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real') +  linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary')
 
                 # now as in the complex_RNN case
                 # (folding in the input data) 
-                foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
-                foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
+                #foldin_re = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Real')
+                #foldin_im = linear(inputs, self._state_size, bias=False, scope='Linear/FoldIn/Imaginary')
+                foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
+                foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
 
                 intermediate_re = foldin_re + Ustate_re
                 intermediate_im = foldin_im + Ustate_im
 
     # messing with relus right now
-                new_state_re = tf.nn.relu(intermediate_re)
-                new_state_im = tf.nn.relu(intermediate_im)
-                new_state = tf.complex(new_state_re, new_state_im)
+#                new_state_re = tf.nn.relu(intermediate_re)
+#                new_state_im = tf.nn.relu(intermediate_im)
+                intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+#                new_state_re = tf.nn.tanh(intermediate_re)
+#                new_state_im = tf.nn.tanh(intermediate_im)
+
+#                new_state = tf.complex(new_state_re, new_state_im)
 
 #                intermediate_state = tf.complex(foldin_re, foldin_im, name='Linear/Intermediate/Complex') + Ustate  
 
@@ -538,8 +617,13 @@ class uRNNCell(steph_RNNCell):
 #                new_state = tf.complex(tf.nn.relu(tf.real(intermediate_state)), tf.nn.relu(tf.imag(intermediate_state)))
 
 #                real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
-                real_state = tf.concat(1, [new_state_re, new_state_im])
-                output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+#                real_state = tf.concat(1, [new_state_re, new_state_im])
+#                output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
+
+#                new_state = tf.concat(1, [new_state_re, new_state_im])
+                # DANGERZONE
+#                output = new_state
+                output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
 #                output = linear(tf.real(new_state), self._output_size, bias=True, scope='Linear/Output')
             else:
                 raise NotImplementedError
