@@ -476,7 +476,9 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
     L = lie_algebra_element(n, lambdas)
     dlambdas = np.zeros_like(lambdas)
     # here comes the trick
-    w, v = eigh(1j*L)
+    # TEST DEBUG CHECK TODO
+    w, v = eigh(1j*L.T)
+    # TEST DEBUG CHECK TODO  (WHY DID THIS WORK?//?)
     w = -1j*w
     vdag = np.conj(v.T)
     expw = np.exp(w)
@@ -506,7 +508,8 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
             grad = np.dot(np.dot(v, V), vdag)
             dU_dlambda = grad
             #delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
-            delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+            #delta = np.trace(np.dot(dcost_dU_re.T, np.real(dU_dlambda)) + np.dot(dcost_dU_im.T, np.imag(dU_dlambda)))
+            delta = np.trace(np.dot(dcost_dU_re, np.real(dU_dlambda)) + np.dot(dcost_dU_im, np.imag(dU_dlambda)))
             dlambdas[i] = delta
     else:
         # woooo
