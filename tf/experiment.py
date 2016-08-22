@@ -23,9 +23,15 @@ from data import ExperimentData
 from unitary_np import lie_algebra_element, lie_algebra_basis_element, numgrad_lambda_update, eigtrick_lambda_update
 from scipy.linalg import expm
 
+import test_rnn_internal
+from copy import deepcopy
+
 # === constants === #
 
 DO_TEST = False
+COMPARE_NUMERICAL_GRADIENT = False
+
+# === fns === #
 
 def get_cost(outputs, y, loss_type='MSE'):
     """
@@ -53,7 +59,7 @@ def get_cost(outputs, y, loss_type='MSE'):
         cost = tf.squeeze(tf.div(cost, i + 1))
     else:
         raise NotImplementedError
-    tf.scalar_summary('cost', cost)
+#    tf.scalar_summary('cost', cost)
     return cost
 
 # == some gradient-specific fns == #
@@ -75,9 +81,9 @@ def get_gradients(opt, cost, clipping=False, variables=None):
     print 'Calculating gradients of cost with respect to Variables:'
     for (g, v) in g_and_v:
         print v.name, v.dtype, v.get_shape()
-        if not v is None and not g is None:
-            tf.histogram_summary(v.name + 'grad', g)
-            tf.histogram_summary(v.name, v)
+#        if not v is None and not g is None:
+#            tf.histogram_summary(v.name + 'grad', g)
+#            tf.histogram_summary(v.name, v)
     if clipping:
         g_and_v = [(tf.clip_by_value(g, -1.0, 1.0), v) for (g, v) in g_and_v]
     return g_and_v
@@ -158,9 +164,20 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         loss_type = 'CE'
         assert input_size == 10
     
-    # p. important line here
-    outputs = RNN(model, x, input_size, state_size, output_size, 
-                  sequence_length=sequence_length)
+    if model == 'uRNN':
+        # generate initial lambdas
+        lambdas = np.random.normal(size=(state_size*state_size))
+        # transpose because that's how it goes in the RNN
+        Uinit = expm(lie_algebra_element(state_size, lambdas)).T
+        Uinit_re = np.real(Uinit)
+        Uinit_im = np.imag(Uinit)
+        # now create the RNN
+        outputs = RNN(model, x, input_size, state_size, output_size, 
+                      sequence_length=sequence_length,
+                      init_re=Uinit_re, init_im=Uinit_im)
+    else:
+        outputs = RNN(model, x, input_size, state_size, output_size, 
+                      sequence_length=sequence_length)
 
     # === logging === #
     identifier = model + '_' + str(T)
@@ -183,7 +200,6 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         opt = create_optimiser(learning_rate)
         nonU_variables = []
         if model == 'uRNN':
-            lambdas = np.random.normal(size=(state_size*state_size))
             U_re_name = 'RNN/uRNN/Unitary/Transition/Real/Matrix:0'
             U_im_name = 'RNN/uRNN/Unitary/Transition/Imaginary/Matrix:0'
             for var in tf.trainable_variables():
@@ -230,11 +246,15 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     # === for checkpointing the model === #
     saver = tf.train.Saver()        # for checkpointing the model
 
+    # === gpu stuff === #
+    config = tf.ConfigProto()
+    config.gpu_options.per_process_gpu_memory_fraction = 0.25           # only use 25% of available GPUs (we have 4 on pex)
+
     # === let's do it! === #
-    with tf.Session() as session:
+    with tf.Session(config=config) as session:
         # summaries
-        merged = tf.merge_all_summaries()
-        train_writer = tf.train.SummaryWriter('./log/' + model, session.graph)
+#        merged = tf.merge_all_summaries()
+#        train_writer = tf.train.SummaryWriter('./log/' + model, session.graph)
         
         session.run(tf.initialize_all_variables())
         
@@ -252,15 +272,12 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # we can use the eigtrick, lambdas is defined...
                     if model == 'uRNN':
                         # extract dcost/dU terms from tf
-                        # TODO DEBUG dcost_dU_re and dcost_dU_im are MASSIVE
                         dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
-                        # TODO MORE DEBUG
-                        gradz_U, gradz_nonU = session.run([g_and_v_U[0][0], g_and_v_nonU[0][0]], {x:batch_x, y:batch_y})
-                        pdb.set_trace()
                         # calculate gradients of lambdas using eigenvalue decomposition trick
                         U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
-                        # calculate train cost, update variables
-                        train_cost, _, _, _ = session.run([cost, train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
+
+                        train_cost = session.run(cost, {x:batch_x, y:batch_y})
+                        _, _, _ = session.run([train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
                     else:
                         #model == 'ortho_tanhRNN':
                         # extract dcost/dU terms from tf
@@ -270,17 +287,63 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
                         assert np.array_equal(U_new_im_array, np.zeros_like(U_new_im_array))
                         # calculate train cost, update variables
+#                        train_cost, _, _, summary = session.run([cost, train_op, assign_op, merged], {x: batch_x, y:batch_y, U_new: U_new_re_array})
                         train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
                
-                    # TODO TEST
-                    COMPARE_NUMERICAL_GRADIENT = True
-                    if COMPARE_NUMERICAL_GRADIENT:
-                        # checking numerical gradients (EXPENSIVE)
-                        # TODO: figure out why these are different :/
-                        basic_cost = session.run(cost, {x: batch_x, y:batch_y})
+                else:
+                    # no eigtrick required, no numerical gradients, all is fine
+                    train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
+                 
+                 # TODO ... this section can be retired soon-ish
+                if COMPARE_NUMERICAL_GRADIENT:
+                    EPSILON=1e-4
+                    basic_cost = session.run(cost, {x: batch_x, y:batch_y})
+                    # check the normal TF gradients regardless
+                    #Gradvar_name = 'RNN/complex_RNN/Reflection/Second/Reflection/Real:0'
+                    Gradvar_name = ''
+                    for v in tf.trainable_variables():
+                        if v.name == Gradvar_name:
+                            Gradvar = v
+                            break
+                    else:
+                        # uh oh
+                        pick = np.random.choice(len(tf.trainable_variables()))
+                        Gradvar = tf.trainable_variables()[pick]
+                        print 'WARNING: Gradvar with name', Gradvar_name, 'not found in trainable variables, selecting', Gradvar.name, 'instead.'
+                    # interested in this specific array, "Gradvar"
+                    dcost_dGradvar_tf = session.run(tf.gradients(cost, Gradvar), {x:batch_x, y:batch_y})[0]
+                    Gradvar_array = session.run(Gradvar, {x:batch_x, y:batch_y})
+                    dcost_dGradvar_num = np.zeros_like(dcost_dGradvar_tf)
+                    perturbed_Gradvar = deepcopy(Gradvar_array)
+                    if len(dcost_dGradvar_tf.shape) == 2:
+                        # go over the shape of Gradvar
+                        imax, jmax = dcost_dGradvar_tf.shape
+                        for i in xrange(imax):
+                            for j in xrange(jmax):
+                                perturbed_Gradvar[i, j] += EPSILON
+                                # recalculate the cost
+                                perturbed_cost = session.run(cost, {x:batch_x, y:batch_y, Gradvar: perturbed_Gradvar})
+                                gradient = (perturbed_cost - basic_cost)/EPSILON
+                                dcost_dGradvar_num[i, j] = gradient
+                                # deperturb
+                                perturbed_Gradvar[i, j] -= EPSILON
+                    else:
+                        # assume 1D
+                        imax = len(dcost_dGradvar_tf)
+                        for i in xrange(imax):
+                            perturbed_Gradvar[i] += EPSILON
+                            perturbed_cost = session.run(cost, {x:batch_x, y:batch_y, Gradvar: perturbed_Gradvar})
+                            gradient = (perturbed_cost - basic_cost)/EPSILON
+                            dcost_dGradvar_num[i] = gradient
+                            # deperturb
+                            perturbed_Gradvar[i] -= EPSILON
+                    # now compare
+                    print np.mean(np.abs(dcost_dGradvar_tf - dcost_dGradvar_num))
+                    pdb.set_trace()
+                    # NOW check the eigtrick lambda updates part (if relevant)
+                    if model == 'uRNN' or 'orthogonal' in model:
                         L = lie_algebra_element(state_size, lambdas)
                         numerical_dcost_dlambdas = np.zeros_like(lambdas)
-                        EPSILON=1e-5
                         if model == 'uRNN':
                             T_indices = xrange(len(lambdas))
                         else:
@@ -292,7 +355,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         for e in T_indices:
                             print 100.0*e/len(lambdas)
                             perturbed_L = L + EPSILON*lie_algebra_basis_element(state_size, e, complex_out=True)
-                            perturbed_U = expm(perturbed_L)
+                            perturbed_U = expm(perturbed_L).T
                             if model == 'uRNN':
                                 perturbed_U_re = np.real(perturbed_U)
                                 perturbed_U_im = np.imag(perturbed_U)
@@ -301,33 +364,17 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                                 perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_variable: perturbed_U})
                             gradient = (perturbed_cost - basic_cost)/EPSILON
                             print gradient, dlambdas[lambda_index]
-                            #pdb.set_trace()
                             numerical_dcost_dlambdas[lambda_index] = gradient
                             lambda_index += 1
                         # now compare with dlambdas
-                        print np.mean(dlambdas - numerical_dcost_dlambdas)
-                        pdb.set_trace()
-                    # DETEST
-                else:
-                    # TODO testing nans
-                   # vv = tf.trainable_variables()
-                   # vv_vals = session.run(vv, {x: batch_x, y: batch_y})
-                   # gradz = tf.gradients(cost, vv)
-                    # get the ok grads
-                   # good_gradz = [g for g in gradz if not g is None]
-                    #print good_gradz
-                   # good_gradz_vals = session.run(good_gradz, {x: batch_x, y: batch_y})
-                   # cost_vals = session.run(cost, {x:batch_x, y:batch_y})
-                   # print cost_vals
-                    #pdb.set_trace()
-                    # ENDTODO
-                    # no eigtrick required, no numerical gradients, all is fine
-                    train_cost, _, summary = session.run([cost, train_op, merged], {x: batch_x, y: batch_y})
-                
-                train_writer.add_summary(summary, batch_index)
-                train_cost_trace.append(train_cost)
+                        print np.mean(np.abs(dlambdas - numerical_dcost_dlambdas))
 
-                if np.random.random() < 0.2:
+          
+                # TODO OFF FOR NOW
+#                train_writer.add_summary(summary, batch_index)
+#                train_cost_trace.append(train_cost)
+
+                if np.random.random() < 0.01:
                     print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
 
                 if batch_index % 50 == 0:
@@ -369,7 +416,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 # === parse inputs === #
 parser = argparse.ArgumentParser(description='Run task of long-term memory capacity of RNN.')
 parser.add_argument('--task', type=str, help='which task? adding/memory', 
-                    default='memory')
+                    default='adding')
 parser.add_argument('--batch_size', type=int, 
                     default=20)
 parser.add_argument('--state_size', type=int, help='size of internal state', 
@@ -383,7 +430,7 @@ parser.add_argument('--data_path', type=str, help='path to dict of ExperimentDat
 parser.add_argument('--learning_rate', type=float, help='prefactor of gradient in gradient descent parameter update', 
                     default=0.001)
 parser.add_argument('--num_epochs', type=int, help='number of times to run through training data', 
-                    default=5)
+                    default=10)
 options = vars(parser.parse_args())
 
 # === derivative options === #
@@ -437,3 +484,8 @@ elif options['task'] == 'memory':
 print 'Created dictionary of options'
 for (key, value) in options.iteritems():
     print key, ':\t', value
+
+# === now run (auto mode) === #
+AUTO = True
+if AUTO:
+    run_experiment(**options)
