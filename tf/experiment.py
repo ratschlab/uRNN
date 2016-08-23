@@ -70,6 +70,16 @@ def get_cost(outputs, y, loss_type='MSE'):
 #    tf.scalar_summary('cost', cost)
     return cost
 
+def mnist_accuracy(outputs, y):
+    """
+    Softmax on the final outputs to get classes, then get accuracies.
+    """
+    output = outputs[-1]
+    softmax = tf.nn.softmax(output)
+    predictions = tf.argmax(softmax, 1)
+    accuracy = tf.contrib.metrics.accuracy(predictions, y)
+    return accuracy
+
 # == some gradient-specific fns == #
 def create_optimiser(learning_rate):
     print 'WARNING: RMSProp does not support complex variables!'
@@ -133,17 +143,19 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
     Either load or generate data.
     """
     if load_path == '':
-        save_path = 'input/' + task + '/' + str(int(time())) + '_' + str(T) + '.pk'
-        print 'No data path provided, generating and saving to', save_path
+        print 'No data path provided...'
         # generate it
         if task == 'mnist':
             train = ExperimentData(ntrain, 'mnist_train', T)
             vali = ExperimentData(nvali, 'mnist_vali', T)
             test = ExperimentData(ntest, 'mnist_test', T)
+            save_path = 'input/' + task + '/mnist.pk'
         else:
             train = ExperimentData(ntrain, task, T)
             vali = ExperimentData(nvali, task, T)
             test = ExperimentData(ntest, task, T)
+            save_path = 'input/' + task + '/' + str(int(time())) + '_' + str(T) + '.pk'
+        print '...generating and saving to', save_path
         save_dict = {'train': train, 'vali': vali, 'test': test}
         cPickle.dump(save_dict, open(save_path, 'wb'))
     else:
@@ -215,6 +227,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
         hidden_gradients_file = open(hidden_gradients_path, 'w')
         hidden_gradients_file.write('batch ' + ' '.join(map(str, xrange(train_data.sequence_length))) + '\n')
+
+    # === mnist-specific === #
+    if task == 'mnist':
+        mnist_acc = mnist_accuracy(outputs, y)
 
     # === ops for training === #
     cost = get_cost(outputs, y, loss_type)
@@ -423,6 +439,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     else:
                         print epoch, '\t', batch_index, '\t    VALI', loss_type + ':', vali_cost
 
+                    if task == 'mnist':
+                        vali_acc = session.run(mnist_acc, {x:vali_data.x, y:vali_data.y})
+                        print vali_acc
+
                 if batch_index % 100 == 0:
                     save_vals = {'train_loss': train_cost_trace,
                                  'vali_loss': vali_cost_trace,
@@ -508,14 +528,14 @@ elif options['task'] == 'memory':
     else:
         options['data_path'] = ''
 elif options['task'] == 'mnist':
-#    options['data_path'] = 'input/mnist/mnist.pk'    # (T is meaningless here...)
+    options['data_path'] = 'input/mnist/mnist.pk'    # (T is meaningless here...)
     options['data_path'] = ''
 else:
     raise ValueError(options['task'])
 
 # === suggestions (param values from paper) === #
 print 'Suggested state sizes:'
-if options['task'] == 'adding':
+if options['task'] == 'adding' or options['task'] == 'mnist':
     print 'tanhRNN:\t80'
     print 'IRNN:\t\t80'
     print 'LSTM:\t\t40'
