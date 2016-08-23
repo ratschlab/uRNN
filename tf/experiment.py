@@ -144,7 +144,7 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
 
 # == and now for main == #
 def run_experiment(task, batch_size, state_size, T, model, data_path, 
-                  gradient_clipping, learning_rate, num_epochs, timestamp=False):
+                  gradient_clipping, learning_rate, num_epochs, identifier):
     print 'running', task, 'task with', model, 'and state size', state_size
  
     # === data === #
@@ -180,18 +180,19 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                       sequence_length=sequence_length)
 
     # === logging === #
-    identifier = model + '_' + str(T)
-    if timestamp:
-        identifier = identifier + '_' + str(int(time()))
+    if identifier:
+        mname = identifier + '_' + model + '_T' + str(T) + '_n' + str(state_size)
+    else:
+        mname = model + '_T' + str(T) + '_n' + str(state_size)
     
-    best_model_path = 'output/' + task + '/' + identifier + '.best_model.ckpt'
+    best_model_path = 'output/' + task + '/' + mname + '.best_model.ckpt'
     best_vali_cost = 1e6
     
     train_cost_trace = []
     vali_cost_trace = []
-    trace_path = 'output/' + task + '/' + identifier + '.trace.pk'
+    trace_path = 'output/' + task + '/' + mname + '.trace.pk'
 
-    hidden_gradients_path = 'output/' + task + '/' + identifier + '.hidden_gradients.pk' #TODO: internal monitoring
+    hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.pk' #TODO: internal monitoring
 
     # === ops for training === #
     cost = get_cost(outputs, y, loss_type)
@@ -237,7 +238,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         train_op = update_variables(opt, g_and_v_nonU)
                     
         # save-specific thing: saving lambdas
-        lambda_file = open('output/' + identifier + '_lambdas.txt', 'w')
+        lambda_file = open('output/' + mname + '_lambdas.txt', 'w')
         lambda_file.write('batch ' + ' '.join(map(lambda x: 'lambda_' + str(x), xrange(len(lambdas)))) + '\n')
     else:
         # nothing special here, movin' along...
@@ -248,7 +249,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.25           # only use 25% of available GPUs (we have 4 on pex)
+    config.gpu_options.per_process_gpu_memory_fraction = 0.3          # only use 25% of available GPUs (we have 4 on pex)
 
     # === let's do it! === #
     with tf.Session(config=config) as session:
@@ -431,6 +432,8 @@ parser.add_argument('--learning_rate', type=float, help='prefactor of gradient i
                     default=0.001)
 parser.add_argument('--num_epochs', type=int, help='number of times to run through training data', 
                     default=10)
+parser.add_argument('--identifier', type=str, help='a string to identify the experiment',
+                    default='')
 options = vars(parser.parse_args())
 
 # === derivative options === #
