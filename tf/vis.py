@@ -11,22 +11,25 @@ import numpy as np
 plt.clf()
 
 # === constants === #
-models = ['80_tanhRNN', 
-          '32_tanhRNN',
-          '18_tanhRNN',
-          '17_tanhRNN',
-          '16_tanhRNN',
-          '15_tanhRNN',
-          '14_tanhRNN',
-          '2_tanhRNN']
-          #          'IRNN', 
-          #          'LSTM', 
-          #          'complex_RNN', 
+models = ['IRNN', 
+          'LSTM', 
+          'tanhRNN',
+          'complex_RNN',
+          'uRNN']
+ 
+#          '80_tanhRNN', 
+#          '32_tanhRNN',
+#          '18_tanhRNN',
+#          '17_tanhRNN',
+#          '16_tanhRNN',
+#          '15_tanhRNN',
+#          '14_tanhRNN',
+#          '2_tanhRNN']
+         #          'complex_RNN', 
           #          'ortho_tanhRNN',
           #          'ortho16_tanhRNN', 
           #          'ortho64_tanhRNN', 
           #          'ortho128_tanhRNN', 
-          #          'uRNN']
 cmap = mpl.cm.get_cmap('gist_rainbow')
 
 colours = {'80_tanhRNN': mpl.colors.rgb2hex(cmap(0)),
@@ -37,6 +40,7 @@ colours = {'80_tanhRNN': mpl.colors.rgb2hex(cmap(0)),
            '15_tanhRNN': mpl.colors.rgb2hex(cmap(5.0*(1.0/len(models)))),
            '14_tanhRNN': mpl.colors.rgb2hex(cmap(6.0*(1.0/len(models)))),
            '2_tanhRNN': mpl.colors.rgb2hex(cmap(7.0*(1.0/len(models)))),
+           'tanhRNN': 'red',
            'IRNN': 'pink', 
            'LSTM': 'green', 
            'complex_RNN': 'blue', 
@@ -51,6 +55,7 @@ colours = {'80_tanhRNN': mpl.colors.rgb2hex(cmap(0)),
 #task = sys.argv[2]
 #plot_vali = sys.argv[3] == 'vali'
 T = 100
+#task = 'memory'
 task = 'adding'
 plot_vali = sys.argv[1] == 'vali'
 
@@ -115,8 +120,13 @@ for (model, trace) in traces.iteritems():
     if train_min < ymin:
         ymin = train_min
 
+if task == 'memory':
+    display_scaling = 1000
+else:
+    display_scaling = 100
+
 ymax = 0.25
-xmax = xmax*1.7
+xmax = xmax/display_scaling
 print 0, xmax
 print ymin, ymax
 ymin = -0.001
@@ -125,11 +135,14 @@ plt.axis([0, xmax, ymin, ymax])
 # construct the arguments to plot
 data_series = dict()
 for model in traces.keys():
-    series_x = traces[model]['scaling_factor']*np.arange(len(traces[model][loss]))
+    series_x = traces[model]['scaling_factor']*np.arange(len(traces[model][loss]))/display_scaling
     series_y = np.array(traces[model][loss])
     colour = colours[model]
     data_series[model], = plt.plot(series_x, series_y, colour, label=model, alpha=0.8)
-plt.xlabel("training examples")
+if task == 'memory':
+    plt.xlabel("training examples (thousands)")
+else:
+    plt.xlabel("training examples (hundreds)")
 plt.ylabel(score)
 plt.legend(loc='upper right')
 plt.title(loss)
