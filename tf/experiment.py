@@ -25,13 +25,13 @@ from scipy.linalg import expm
 
 import test_rnn_internal
 from copy import deepcopy
-import re
+import cProfile
 
 # === some bools === #
 
 DO_TEST = False
 COMPARE_NUMERICAL_GRADIENT = False
-SAVE_INTERNAL_GRADS = True
+SAVE_INTERNAL_GRADS = False
 
 # === fns === #
 
@@ -59,6 +59,12 @@ def get_cost(outputs, y, loss_type='MSE'):
             cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, y[:, i])
             cost = tf.add(cost, tf.reduce_mean(cross_entropy))
         cost = tf.squeeze(tf.div(cost, i + 1))
+    elif loss_type == 'mnist':
+        # just use the last output (this is a column for the whole batch, remember)
+        output = outputs[-1]
+        # mean categorical cross entropy
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, y)
+        cost = tf.reduce_mean(cross_entropy)
     else:
         raise NotImplementedError
 #    tf.scalar_summary('cost', cost)
@@ -130,10 +136,14 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
         save_path = 'input/' + task + '/' + str(int(time())) + '_' + str(T) + '.pk'
         print 'No data path provided, generating and saving to', save_path
         # generate it
-        train = ExperimentData(ntrain, task, T)
-        vali = ExperimentData(nvali, task, T)
-        test = ExperimentData(ntest, task, T)
-        # save it
+        if task == 'mnist':
+            train = ExperimentData(ntrain, 'mnist_train', T)
+            vali = ExperimentData(nvali, 'mnist_vali', T)
+            test = ExperimentData(ntest, 'mnist_test', T)
+        else:
+            train = ExperimentData(ntrain, task, T)
+            vali = ExperimentData(nvali, task, T)
+            test = ExperimentData(ntest, task, T)
         save_dict = {'train': train, 'vali': vali, 'test': test}
         cPickle.dump(save_dict, open(save_path, 'wb'))
     else:
@@ -161,11 +171,18 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         output_size = 1
         loss_type = 'MSE'
         assert input_size == 2
+        assert sequence_length == T
     elif task == 'memory':
         output_size = 9
         loss_type = 'CE'
         assert input_size == 10
-    
+        assert sequence_length == T + 20
+    elif task == 'mnist':
+        output_size = 10
+        loss_type = 'mnist'
+        assert input_size == 1
+        assert sequence_length == 28*28
+
     if model == 'uRNN':
         # generate initial lambdas
         lambdas = np.random.normal(size=(state_size*state_size))
@@ -194,9 +211,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     vali_cost_trace = []
     trace_path = 'output/' + task + '/' + mname + '.trace.pk'
 
-    hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
-    hidden_gradients_file = open(hidden_gradients_path, 'w')
-    hidden_gradients_file.write('batch ' + ' '.join(map(str, xrange(train_data.sequence_length))) + '\n')
+    if SAVE_INTERNAL_GRADS:
+        hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
+        hidden_gradients_file = open(hidden_gradients_path, 'w')
+        hidden_gradients_file.write('batch ' + ' '.join(map(str, xrange(train_data.sequence_length))) + '\n')
 
     # === ops for training === #
     cost = get_cost(outputs, y, loss_type)
@@ -242,10 +260,9 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         train_op = update_variables(opt, g_and_v_nonU)
                     
         # save-specific thing: saving lambdas
-        lambda_file = open('output/' + mname + '_lambdas.txt', 'w')
+        lambda_file = open('output/' + task + '/' + mname + '_lambdas.txt', 'w')
         lambda_file.write('batch ' + ' '.join(map(lambda x: 'lambda_' + str(x), xrange(len(lambdas)))) + '\n')
     else:
-        # nothing special here, movin' along...
         train_op = update_step(cost, learning_rate, gradient_clipping)
    
     # === for checkpointing the model === #
@@ -253,7 +270,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.3          # only use 25% of available GPUs (we have 4 on pex)
+    config.gpu_options.per_process_gpu_memory_fraction = 0.5
 
     # === let's do it! === #
     with tf.Session(config=config) as session:
@@ -265,15 +282,17 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
         # === get relevant operations for calculating internal gradient norms === #
         graph_ops = session.graph.get_operations()
-        internal_grads = [None]*train_data.sequence_length
-        internal_norms = np.zeros(shape=train_data.sequence_length)
-        o_counter = 0
-        for o in graph_ops:
-            if 'new_state' in o.name and not 'grad' in o.name:
-                # internal state
-                internal_grads[o_counter] = tf.gradients(cost, o.values()[0])[0]
-                o_counter += 1
-        assert o_counter == train_data.sequence_length
+        if SAVE_INTERNAL_GRADS:
+            internal_grads = [None]*train_data.sequence_length
+            internal_norms = np.zeros(shape=train_data.sequence_length)
+            o_counter = 0
+            for o in graph_ops:
+                if 'new_state' in o.name and not 'grad' in o.name:
+                    # internal state
+                    internal_grads[o_counter] = tf.gradients(cost, o.values()[0])[0]
+                    o_counter += 1
+            pdb.set_trace()
+            assert o_counter == train_data.sequence_length
 
         # === train loop === #
         for epoch in xrange(num_epochs):
@@ -404,8 +423,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     else:
                         print epoch, '\t', batch_index, '\t    VALI', loss_type + ':', vali_cost
 
-                    # NOTE: format consistent with theano version
-                    # TODO: update alongside plotting script
+                if batch_index % 100 == 0:
                     save_vals = {'train_loss': train_cost_trace,
                                  'vali_loss': vali_cost_trace,
                                  'best_vali_loss': best_vali_cost,
@@ -416,13 +434,12 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     cPickle.dump(save_vals, file(trace_path, 'wb'),
                                  cPickle.HIGHEST_PROTOCOL)
 
-                    # uRNN specific stuff: save lambdas
-                    if model == 'uRNN':
-                        lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
+                if model == 'uRNN' and batch_index % 250 == 0:
+                    lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
 
                 # calculate gradients of cost with respect to internal states
                 # save the mean (over the batch) norms of these
-                if SAVE_INTERNAL_GRADS and batch_index == 0 or batch_index == 100:
+                if SAVE_INTERNAL_GRADS and (batch_index == 0 or batch_index == 100):
                     internal_grads_np = session.run(internal_grads, {x:batch_x, y:batch_y})
                     # get norms of each gradient vector, then average over the batch
                     for (k, grad_at_k) in enumerate(internal_grads_np):
@@ -449,13 +466,13 @@ parser.add_argument('--state_size', type=int, help='size of internal state',
 parser.add_argument('--T', type=int, help='memory time-scale or addition input length', 
                     default=100)
 parser.add_argument('--model', type=str, help='which RNN model to use?', 
-                    default='complex_RNN')
+                    default='uRNN')
 parser.add_argument('--data_path', type=str, help='path to dict of ExperimentData objects (if empty, generate data)', 
                     default='')
 parser.add_argument('--learning_rate', type=float, help='prefactor of gradient in gradient descent parameter update', 
                     default=0.001)
 parser.add_argument('--num_epochs', type=int, help='number of times to run through training data', 
-                    default=10)
+                    default=1)
 parser.add_argument('--identifier', type=str, help='a string to identify the experiment',
                     default='')
 options = vars(parser.parse_args())
@@ -490,6 +507,9 @@ elif options['task'] == 'memory':
         options['data_path'] = 'input/memory/1470767936_500.pk'
     else:
         options['data_path'] = ''
+elif options['task'] == 'mnist':
+#    options['data_path'] = 'input/mnist/mnist.pk'    # (T is meaningless here...)
+    options['data_path'] = ''
 else:
     raise ValueError(options['task'])
 

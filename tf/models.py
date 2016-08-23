@@ -353,8 +353,12 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size)
     # split up the input so the RNN can accept it...
-    inputs = [tf.squeeze(input_, [1])
-            for input_ in tf.split(1, sequence_length, x)]
+    # TODO DEBUG TESTING
+    if input_size > 1:
+        inputs = [tf.squeeze(input_, [1])
+                for input_ in tf.split(1, sequence_length, x)]
+    else:
+        inputs = tf.split(1, sequence_length, x)
     # tf 0.7.0
 #    outputs, final_state = rnn.rnn(cell, inputs, initial_state=state_0)
     # tf 0.9.0
@@ -548,7 +552,7 @@ class complex_RNNCell(steph_RNNCell):
                 
                 intermediate_state = step8 + foldin
 
-                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True, name='new_state')
                 
                 output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
 

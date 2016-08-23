@@ -5,7 +5,7 @@
 # Lightly modified from the original, for TensorFlow and readability.
 
 import numpy as np
-#import tensorflow as tf
+import tensorflow as tf
 import pdb
 
 def generate_adding(T, num_examples):
@@ -72,6 +72,73 @@ def generate_memory(T, num_examples, seq_len=10):
    
     return (x_onehot, y)
 
+def load_mnist(which='train'):
+    """
+    Load pre-serialised MNIST data.
+    """
+    directory = '/home/hyland/git/complex_RNN/tf/input/mnist/'
+    print 'Loading', which, 'MNIST data from', directory
+    if which == 'train':
+        x = np.load(directory + 'train_x.npy')
+        y = np.load(directory + 'train_y.npy')
+    elif which == 'vali':
+        x = np.load(directory + 'vali_x.npy')
+        y = np.load(directory + 'vali_y.npy')
+    elif which == 'test':
+        x = np.load(directory + 'test_x.npy')
+        y = np.load(directory + 'test_y.npy')
+    return x, y
+
+class ExperimentData(object):
+    def __init__(self, N, experiment, T, test=False):
+        self.N = N
+        if experiment == 'adding':
+            self.x, self.y = generate_adding(T, N)
+            self.dtype = tf.float32
+            self.input_size = 2
+            self.sequence_length = T
+        elif experiment == 'memory':
+            self.x, self.y = generate_memory(T, N, seq_len=10)
+            self.dtype = tf.int64
+            self.input_size = 10
+            self.sequence_length = self.x.shape[1]      # this is probably T+20
+        elif experiment == 'mnist_train':
+            self.x, self.y = load_mnist('train')
+            self.dtype = tf.int32
+            self.input_size = 1
+            self.sequence_length = 784  # (28*28)
+            self.N = 54000              # N is hardcoded in MNIST
+            assert self.N == self.x.shape[0]
+        elif experiment == 'mnist_vali':
+            self.x, self.y = load_mnist('vali')
+            self.dtype = tf.int32
+            self.input_size = 1
+            self.sequence_length = 784  # (28*28)
+            self.N = 6000               # N is hardcoded in MNIST
+            assert self.N == self.x.shape[0]
+        elif experiment == 'mnist_test':
+            self.x, self.y = load_mnist('test')
+            self.dtype = tf.int32
+            self.input_size = 1
+            self.sequence_length = 784  # (28*28)
+            self.N = 10000              # N is hardcoded in MNIST
+        else:
+            raise NotImplementedError
+    def shuffle(self):
+        permutation = np.random.permutation(self.N)
+        self.x = self.x[permutation]
+        self.y = self.y[permutation]
+    def make_placeholders(self):
+        placeholder_x = tf.placeholder(tf.float32, [None] + list(self.x.shape[1:]))
+        placeholder_y = tf.placeholder(self.dtype, [None] + list(self.y.shape[1:]))
+        return placeholder_x, placeholder_y
+    def get_batch(self, i, batch_size):
+        batch_x = self.x[i * batch_size : (i + 1) * batch_size]
+        batch_y = self.y[i * batch_size : (i + 1) * batch_size]
+        return batch_x, batch_y
+    # TODO: iterator for grabbing batches
+
+# === unitary-specific things === #
 def create_batches(x, y, batch_size, num_batches, num_epochs):
     """
     Given x and y, split into batches.
@@ -117,31 +184,3 @@ def generate_unitary_learning(U, batch_size, num_batches=1, num_epochs=1,
     batches = create_batches(x, y, batch_size, num_batches, num_epochs)
     return batches
 
-class ExperimentData(object):
-    def __init__(self, N, experiment, T):
-        self.N = N
-        if experiment == 'adding':
-            self.x, self.y = generate_adding(T, N)
-            self.dtype = tf.float32
-            self.input_size = 2
-            self.sequence_length = T
-        elif experiment == 'memory':
-            self.x, self.y = generate_memory(T, N, seq_len=10)
-            self.dtype = tf.int64
-            self.input_size = 10
-            self.sequence_length = self.x.shape[1]      # this is probably T+20
-        else:
-            raise NotImplementedError
-    def shuffle(self):
-        permutation = np.random.permutation(self.N)
-        self.x = self.x[permutation]
-        self.y = self.y[permutation]
-    def make_placeholders(self):
-        placeholder_x = tf.placeholder(tf.float32, [None] + list(self.x.shape[1:]))
-        placeholder_y = tf.placeholder(self.dtype, [None] + list(self.y.shape[1:]))
-        return placeholder_x, placeholder_y
-    def get_batch(self, i, batch_size):
-        batch_x = self.x[i * batch_size : (i + 1) * batch_size]
-        batch_y = self.y[i * batch_size : (i + 1) * batch_size]
-        return batch_x, batch_y
-    # TODO: iterator for grabbing batches
