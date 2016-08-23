@@ -104,21 +104,21 @@ class ExperimentData(object):
             self.sequence_length = self.x.shape[1]      # this is probably T+20
         elif experiment == 'mnist_train':
             self.x, self.y = load_mnist('train')
-            self.dtype = tf.int32
+            self.dtype = tf.int64
             self.input_size = 1
             self.sequence_length = 784  # (28*28)
             self.N = 54000              # N is hardcoded in MNIST
             assert self.N == self.x.shape[0]
         elif experiment == 'mnist_vali':
             self.x, self.y = load_mnist('vali')
-            self.dtype = tf.int32
+            self.dtype = tf.int64
             self.input_size = 1
             self.sequence_length = 784  # (28*28)
             self.N = 6000               # N is hardcoded in MNIST
             assert self.N == self.x.shape[0]
         elif experiment == 'mnist_test':
             self.x, self.y = load_mnist('test')
-            self.dtype = tf.int32
+            self.dtype = tf.int64
             self.input_size = 1
             self.sequence_length = 784  # (28*28)
             self.N = 10000              # N is hardcoded in MNIST
