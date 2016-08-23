@@ -25,11 +25,13 @@ from scipy.linalg import expm
 
 import test_rnn_internal
 from copy import deepcopy
+import re
 
-# === constants === #
+# === some bools === #
 
 DO_TEST = False
 COMPARE_NUMERICAL_GRADIENT = False
+SAVE_INTERNAL_GRADS = True
 
 # === fns === #
 
@@ -192,7 +194,9 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     vali_cost_trace = []
     trace_path = 'output/' + task + '/' + mname + '.trace.pk'
 
-    hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.pk' #TODO: internal monitoring
+    hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
+    hidden_gradients_file = open(hidden_gradients_path, 'w')
+    hidden_gradients_file.write('batch ' + ' '.join(map(str, xrange(train_data.sequence_length))) + '\n')
 
     # === ops for training === #
     cost = get_cost(outputs, y, loss_type)
@@ -258,7 +262,19 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 #        train_writer = tf.train.SummaryWriter('./log/' + model, session.graph)
         
         session.run(tf.initialize_all_variables())
-        
+
+        # === get relevant operations for calculating internal gradient norms === #
+        graph_ops = session.graph.get_operations()
+        internal_grads = [None]*train_data.sequence_length
+        internal_norms = np.zeros(shape=train_data.sequence_length)
+        o_counter = 0
+        for o in graph_ops:
+            if 'new_state' in o.name and not 'grad' in o.name:
+                # internal state
+                internal_grads[o_counter] = tf.gradients(cost, o.values()[0])[0]
+                o_counter += 1
+        assert o_counter == train_data.sequence_length
+
         # === train loop === #
         for epoch in xrange(num_epochs):
             # shuffle the data at each epoch
@@ -375,10 +391,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 #                train_writer.add_summary(summary, batch_index)
 #                train_cost_trace.append(train_cost)
 
-                if np.random.random() < 0.01:
-                    print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
-
                 if batch_index % 50 == 0:
+                    print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
                     vali_cost_trace.append(vali_cost)
               
@@ -406,6 +420,16 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     if model == 'uRNN':
                         lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
 
+                # calculate gradients of cost with respect to internal states
+                # save the mean (over the batch) norms of these
+                if SAVE_INTERNAL_GRADS and batch_index == 0 or batch_index == 100:
+                    internal_grads_np = session.run(internal_grads, {x:batch_x, y:batch_y})
+                    # get norms of each gradient vector, then average over the batch
+                    for (k, grad_at_k) in enumerate(internal_grads_np):
+                        norm_at_k = np.mean(np.linalg.norm(grad_at_k, axis=1))
+                        internal_norms[k] = norm_at_k
+                    hidden_gradients_file.write(str(batch_index) + ' ' + ' '.join(map(str, internal_norms)) + '\n')
+                    hidden_gradients_file.flush()
 
         print 'Training completed.'
         if DO_TEST:
