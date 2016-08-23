@@ -154,7 +154,7 @@ def reflection(state, state_size, scope=None, theano_reflection=False, real=Fals
             new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
             return new_state
 
-def relu_mod(state, scope=None, real=False):
+def relu_mod(state, scope=None, real=False, name=None):
     """
     Rectified linear unit for complex-valued state.
     (Equation 8 in http://arxiv.org/abs/1511.06464)
@@ -185,7 +185,8 @@ def relu_mod(state, scope=None, real=False):
                                                               shape=[hidden_size]))
             bias_term = tf.concat(0, [bias_re, tf.zeros_like(bias_re)])
             rescale = tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5*tf.ones_like(modulus) )
-    return state * rescale
+        output = tf.mul(state, rescale, name=name)
+    return output
 
 def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
     """
@@ -430,7 +431,7 @@ class tanhRNNCell(steph_RNNCell):
             output = linear(state)
         """
         with vs.variable_scope(scope):
-            new_state = tf.tanh(linear([inputs], self._state_size, bias=True, scope='Linear/FoldIn') + linear([state], self._state_size, bias=False, scope='Linear/Transition'))
+            new_state = tf.tanh(linear([inputs], self._state_size, bias=True, scope='Linear/FoldIn') + linear([state], self._state_size, bias=False, scope='Linear/Transition'), name='new_state')
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
@@ -445,7 +446,7 @@ class IRNNCell(steph_RNNCell):
         with vs.variable_scope(scope):
             # the identity flag says we initialize the part of the transition matrix corresponding to the 1th element of
             # the first input to linear (a.g. [inputs, state], aka 'state') to the identity
-            new_state = tf.nn.relu(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition', identity=1))
+            new_state = tf.nn.relu(linear([inputs, state], self._state_size, bias=True, scope='Linear/Transition', identity=1), name='new_state')
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
@@ -468,7 +469,7 @@ class LSTMCell(steph_RNNCell):
             candidate = tf.tanh(linear([inputs, hidden_prev], hidden_size, bias=True, scope='Linear/Candidate'))
             forget = tf.sigmoid(linear([inputs, hidden_prev], hidden_size, bias=True, scope='Linear/Forget'))
             
-            intermediate_state = i * candidate + forget * state_prev
+            intermediate_state = tf.add(tf.mul(i, candidate), tf.mul(forget, state_prev), name='new_state')
             
             # out (not the real output, confusingly)
             # NOTE: this differs from the LSTM implementation in TensorFlow
@@ -516,7 +517,7 @@ class complex_RNNCell(steph_RNNCell):
 #                intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
 #                new_state_real = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
                 
-                new_state = relu_mod(intermediate_state, scope='ReLU_mod')
+                new_state = relu_mod(intermediate_state, scope='ReLU_mod', name='new_state')
 #                new_state = intermediate_state
 
                 
@@ -604,7 +605,10 @@ class uRNNCell(steph_RNNCell):
 #                new_state_im = tf.nn.relu(intermediate_im)
                 intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
 
-                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+#                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+                new_state = tf.nn.tanh(intermediate_state, name='new_state')
+                #pdb.set_trace()
+
 #                new_state_re = tf.nn.tanh(intermediate_re)
 #                new_state_im = tf.nn.tanh(intermediate_im)
 
