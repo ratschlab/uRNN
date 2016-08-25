@@ -51,9 +51,14 @@ def times_diag(arg, state_size, scope=None, real=False, split=False):
                                      dtype=tf.float32)
             diag_re = tf.diag(tf.cos(thetas))
             diag_im = tf.diag(tf.sin(thetas))
-            
-            state_re = tf.slice(arg, [0, 0], [-1, hidden_size])
-            state_im = tf.slice(arg, [0, hidden_size], [-1, hidden_size])
+           
+            if type(arg) == tuple:
+                state_re = arg[0]
+                state_im = arg[1]
+            else:
+                # cut it up
+                state_re = tf.slice(arg, [0, 0], [-1, hidden_size])
+                state_im = tf.slice(arg, [0, hidden_size], [-1, hidden_size])
 
             intermediate_re = tf.matmul(state_re, diag_re) - tf.matmul(state_im, diag_im)
             intermediate_im = tf.matmul(state_im, diag_re) + tf.matmul(state_re, diag_im)
@@ -542,8 +547,8 @@ class complex_RNNCell(steph_RNNCell):
                                               trainable=False)
                 step4_re = tf.matmul(step3_re, permutation)
                 step4_im = tf.matmul(step3_im, permutation)
-                step4 = tf.concat(1, [step4_re, step4_im])
-                step5_re, step5_im = times_diag(step4, self._state_size, scope='Diag/Second', real=True, split=True)
+#                step4 = tf.concat(1, [step4_re, step4_im])
+                step5_re, step5_im = times_diag((step4_re, step4_im), self._state_size, scope='Diag/Second', real=True, split=True)
                 step6 = tf.batch_ifft(tf.complex(step5_re, step5_im), name='FFT')
                 step7 = reflection(step6, self._state_size/2, scope='Reflection/Second', real=True, split=False)
                 step8 = times_diag(step7, self._state_size, scope='Diag/Third', real=True, split=False)
