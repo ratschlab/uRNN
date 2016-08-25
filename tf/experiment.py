@@ -49,13 +49,14 @@ def get_cost(outputs, y, loss_type='MSE'):
         # mean squared error
         # discount all but the last of the outputs
         output = outputs[-1]
-        # now this object is shape batch_size, output_size
-        cost = tf.reduce_mean(tf.sub(output, y) ** 2)
+        # now this object is shape batch_size, output_size (= 1, it should be)
+        cost = tf.reduce_mean(tf.sub(output, y) ** 2, 0)[0]
     elif loss_type == 'CE':
         # cross entropy
         # (there may be more efficient ways to do this)
         cost = tf.zeros([1])
         for (i, output) in enumerate(outputs):
+            # maybe this is wrong
             cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, y[:, i])
             cost = tf.add(cost, tf.reduce_mean(cross_entropy))
         cost = tf.squeeze(tf.div(cost, i + 1))
@@ -69,16 +70,6 @@ def get_cost(outputs, y, loss_type='MSE'):
         raise NotImplementedError
 #    tf.scalar_summary('cost', cost)
     return cost
-
-def mnist_accuracy(outputs, y):
-    """
-    Softmax on the final outputs to get classes, then get accuracies.
-    """
-    output = outputs[-1]
-    softmax = tf.nn.softmax(output)
-    predictions = tf.argmax(softmax, 1)
-    accuracy = tf.contrib.metrics.accuracy(predictions, y)
-    return accuracy
 
 # == some gradient-specific fns == #
 def create_optimiser(learning_rate):
@@ -168,7 +159,8 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
 
 # == and now for main == #
 def run_experiment(task, batch_size, state_size, T, model, data_path, 
-                  gradient_clipping, learning_rate, num_epochs, identifier):
+                  gradient_clipping, learning_rate, num_epochs, identifier, 
+                  verbose):
     print 'running', task, 'task with', model, 'and state size', state_size
  
     # === data === #
@@ -195,6 +187,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         assert input_size == 1
         assert sequence_length == 28*28
 
+    if verbose: print 'setting up RNN...'
     if model == 'uRNN':
         # generate initial lambdas
         lambdas = np.random.normal(size=(state_size*state_size))
@@ -219,20 +212,24 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     best_model_path = 'output/' + task + '/' + mname + '.best_model.ckpt'
     best_vali_cost = 1e6
     
-    train_cost_trace = []
-    vali_cost_trace = []
-    trace_path = 'output/' + task + '/' + mname + '.trace.pk'
+    vali_trace_path = 'output/' + task + '/' + mname + '.vali.txt'
+    vali_trace_file = open(vali_trace_path, 'w')
+    vali_trace_file.write('epoch batch vali_cost\n')
+    train_trace_path = 'output/' + task + '/' + mname + '.train.txt'
+    train_trace_file = open(train_trace_path, 'w')
+    train_trace_file.write('epoch batch train_cost\n')
+    if task == 'mnist':
+        vali_acc_trace_path = 'output/' + task + '/' + mname + '.vali_acc.txt'
+        vali_acc_trace_file = open(vali_acc_trace_path, 'w')
+        vali_acc_trace_file.write('epoch batch vali_acc_cost\n')
 
     if SAVE_INTERNAL_GRADS:
         hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
         hidden_gradients_file = open(hidden_gradients_path, 'w')
         hidden_gradients_file.write('batch ' + ' '.join(map(str, xrange(train_data.sequence_length))) + '\n')
 
-    # === mnist-specific === #
-    if task == 'mnist':
-        mnist_acc = mnist_accuracy(outputs, y)
-
     # === ops for training === #
+    if verbose: print 'setting up train ops...'
     cost = get_cost(outputs, y, loss_type)
     if model in {'ortho_tanhRNN', 'uRNN'}:
         # COMMENCE GRADIENT HACKS
@@ -286,19 +283,21 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.5
+    config.gpu_options.per_process_gpu_memory_fraction = 0.25
 
     # === let's do it! === #
+    if verbose: print 'initialising session...'
     with tf.Session(config=config) as session:
         # summaries
 #        merged = tf.merge_all_summaries()
 #        train_writer = tf.train.SummaryWriter('./log/' + model, session.graph)
         
+        if verbose: print 'initialising variables...'
         session.run(tf.initialize_all_variables())
 
         # === get relevant operations for calculating internal gradient norms === #
-        graph_ops = session.graph.get_operations()
         if SAVE_INTERNAL_GRADS:
+            graph_ops = session.graph.get_operations()
             internal_grads = [None]*train_data.sequence_length
             internal_norms = np.zeros(shape=train_data.sequence_length)
             o_counter = 0
@@ -311,8 +310,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
             assert o_counter == train_data.sequence_length
 
         # === train loop === #
+        if verbose: print 'preparing to train!'
         for epoch in xrange(num_epochs):
             # shuffle the data at each epoch
+            if verbose: print 'shuffling training data at epoch', epoch
             train_data.shuffle()
             for batch_index in xrange(num_batches):
                 # definitely scope for fancy iterator but yolo
@@ -321,6 +322,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                 # === gradient hacks etc. === #
                 # TODO: speed-profiling
                 if model == 'uRNN' or model == 'ortho_tanhRNN':
+                    if verbose: print 'preparing for gradient hacks'
                     # we can use the eigtrick, lambdas is defined...
                     if model == 'uRNN':
                         # extract dcost/dU terms from tf
@@ -343,11 +345,19 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         train_cost, _, _ = session.run([cost, train_op, assign_op], {x: batch_x, y:batch_y, U_new: U_new_re_array})
                
                 else:
+                    if verbose: print 'calculating cost and updating parameters...'
                     # no eigtrick required, no numerical gradients, all is fine
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
-                 
+                
+                #### DEBUG BLARGH
+#                oo = session.run(outputs, {x:batch_x, y:batch_y})
+#                print 'check outputs'
+#                pdb.set_trace()
+                #### DEBUG
+
                  # TODO ... this section can be retired soon-ish
                 if COMPARE_NUMERICAL_GRADIENT:
+                    print 'comparing numerical and tensorflow gradients...'
                     EPSILON=1e-4
                     basic_cost = session.run(cost, {x: batch_x, y:batch_y})
                     # check the normal TF gradients regardless
@@ -424,12 +434,12 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
           
                 # TODO OFF FOR NOW
 #                train_writer.add_summary(summary, batch_index)
-#                train_cost_trace.append(train_cost)
 
-                if batch_index % 50 == 0:
+                if batch_index % 150 == 0:
                     print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
-                    vali_cost_trace.append(vali_cost)
+                    train_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(train_cost) + '\n')
+                    vali_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_cost) + '\n')
               
                     # save best parameters
                     if vali_cost < best_vali_cost:
@@ -440,26 +450,35 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         print epoch, '\t', batch_index, '\t    VALI', loss_type + ':', vali_cost
 
                     if task == 'mnist':
-                        vali_acc = session.run(mnist_acc, {x:vali_data.x, y:vali_data.y})
-                        print vali_acc
+                        # get preds
+                        last_outs = session.run(outputs[-1], {x: vali_data.x, y:vali_data.y})
+                        class_predictions = np.argmax(np.exp(last_outs)/np.sum(np.exp(last_outs), axis=1).reshape(6000, -1), axis=1)
+                        pdb.set_trace()
+                        vali_acc = 100 * np.mean(class_predictions == vali_data.y)
+                        vali_acc_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_acc) + '\n')
+                        print epoch, '\t', batch_index, '\t    VALI ACC:', vali_acc
 
-                if batch_index % 100 == 0:
-                    save_vals = {'train_loss': train_cost_trace,
-                                 'vali_loss': vali_cost_trace,
-                                 'best_vali_loss': best_vali_cost,
-                                 'model': model,
-                                 'time_steps': T,
-                                 'batch_size': batch_size}
+#                if batch_index % 500 == 0:
+#                    if verbose: print 'saving traces to', trace_path
+#                    save_vals = {'train_loss': train_cost_trace,
+#                                 'vali_loss': vali_cost_trace,
+#                                 'vali_acc': vali_acc_trace,
+#                                 'best_vali_loss': best_vali_cost,
+#                                 'model': model,
+#                                 'time_steps': T,
+#                                 'batch_size': batch_size}
 
-                    cPickle.dump(save_vals, file(trace_path, 'wb'),
-                                 cPickle.HIGHEST_PROTOCOL)
+#                    cPickle.dump(save_vals, file(trace_path, 'wb'),
+#                                 cPickle.HIGHEST_PROTOCOL)
+#                    if verbose: print 'finished saving!'
 
-                if model == 'uRNN' and batch_index % 250 == 0:
+                if batch_index % 500 and model == 'uRNN':
                     lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
 
                 # calculate gradients of cost with respect to internal states
                 # save the mean (over the batch) norms of these
                 if SAVE_INTERNAL_GRADS and (batch_index == 0 or batch_index == 100):
+                    print 'calculating internal gradients...'
                     internal_grads_np = session.run(internal_grads, {x:batch_x, y:batch_y})
                     # get norms of each gradient vector, then average over the batch
                     for (k, grad_at_k) in enumerate(internal_grads_np):
@@ -492,9 +511,11 @@ parser.add_argument('--data_path', type=str, help='path to dict of ExperimentDat
 parser.add_argument('--learning_rate', type=float, help='prefactor of gradient in gradient descent parameter update', 
                     default=0.001)
 parser.add_argument('--num_epochs', type=int, help='number of times to run through training data', 
-                    default=1)
+                    default=10)
 parser.add_argument('--identifier', type=str, help='a string to identify the experiment',
                     default='')
+parser.add_argument('--verbose', type=bool, help='verbosity?',
+                    default=False)
 options = vars(parser.parse_args())
 
 # === derivative options === #
@@ -529,7 +550,6 @@ elif options['task'] == 'memory':
         options['data_path'] = ''
 elif options['task'] == 'mnist':
     options['data_path'] = 'input/mnist/mnist.pk'    # (T is meaningless here...)
-    options['data_path'] = ''
 else:
     raise ValueError(options['task'])
 
@@ -541,11 +561,13 @@ if options['task'] == 'adding' or options['task'] == 'mnist':
     print 'LSTM:\t\t40'
     print 'complex_RNN:\t128'
     print 'ortho_tanhRHH:\t20, 64'
+    print 'uRNN:\t30'
 elif options['task'] == 'memory':
     print 'tanhRNN:\t128'
     print 'IRNN:\t\t128'
     print 'LSTM:\t\t128'
     print 'complex_RNN:\t512'
+    print 'uRNN:\t60'
 
 # === print stuff ===#
 print 'Created dictionary of options'
