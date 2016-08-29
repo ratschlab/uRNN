@@ -14,11 +14,11 @@ d<-args[1]
 noise<-0.01
 
 #fname_base<-paste0('output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
-fname_base<-paste0('output/simple/hazan_3_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('output/simple/hazan_3_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb5000_')
 #fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('output/simple/lr_d', d, '_noise', noise, '_bn20_nb50000_')
->>>>>>> b91e4b0213f46d11aa66ffe92b75cef7c2ecdf23
 #fname_base<-paste0('output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('output/simple/nips/random_projections_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
@@ -72,6 +72,8 @@ my_means <- function(data, indices){
 }
 
 means<-aggregate(dtest$loss, by=list(dtest$experiment), FUN=mean)
+print(means)
 
 # testing bootstrap approach
 results <- boot(data=dtest, statistic=my_means, R=5)
+print(results)
