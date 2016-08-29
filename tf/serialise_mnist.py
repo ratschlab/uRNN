@@ -1,6 +1,7 @@
 #!/usr/bin/env
 
 import mnist
+# the mnist script parses the mnist binaries, there are many examples online
 import numpy as np
 
 path = '/home/hyland/git/complex_RNN/tf/input/mnist'
@@ -30,6 +31,7 @@ y = np.int64(labels[vali_indices])
 
 np.save('vali_x', x)
 np.save('vali_y', y)
+
 # === test! === #
 images, labels = mnist.load_mnist('testing', path=path)
 
