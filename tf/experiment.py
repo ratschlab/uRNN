@@ -440,6 +440,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
                     train_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(train_cost) + '\n')
                     vali_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_cost) + '\n')
+                    train_trace_file.flush()
+                    vali_trace_file.flush()
               
                     # save best parameters
                     if vali_cost < best_vali_cost:
@@ -453,9 +455,9 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         # get preds
                         last_outs = session.run(outputs[-1], {x: vali_data.x, y:vali_data.y})
                         class_predictions = np.argmax(np.exp(last_outs)/np.sum(np.exp(last_outs), axis=1).reshape(6000, -1), axis=1)
-                        pdb.set_trace()
                         vali_acc = 100 * np.mean(class_predictions == vali_data.y)
                         vali_acc_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_acc) + '\n')
+                        vali_acc_trace_file.flush()
                         print epoch, '\t', batch_index, '\t    VALI ACC:', vali_acc
 
 #                if batch_index % 500 == 0:
