@@ -23,7 +23,6 @@ from data import ExperimentData
 from unitary_np import lie_algebra_element, lie_algebra_basis_element, numgrad_lambda_update, eigtrick_lambda_update
 from scipy.linalg import expm
 
-import test_rnn_internal
 from copy import deepcopy
 import cProfile
 
@@ -202,7 +201,9 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     if verbose: print 'setting up RNN...'
     if model == 'uRNN':
         # generate initial lambdas
-        lambdas = np.random.normal(size=(state_size*state_size))
+        #lambdas = np.random.normal(size=(state_size*state_size))
+#        lambdas = np.random.normal(size=(state_size*state_size), scale=0.001)
+        lambdas = np.zeros(shape=(state_size*state_size)) + 1e-4
         # transpose because that's how it goes in the RNN
         Uinit = expm(lie_algebra_element(state_size, lambdas)).T
         Uinit_re = np.real(Uinit)
@@ -543,24 +544,24 @@ else:
 T = options['T']
 if options['task'] == 'adding':
     if T == 100:
-        options['data_path'] = 'input/adding/1470744790_100.pk'
+        options['data_path'] = 'input/adding/1472466146_100.pk'
     elif T == 200:
-        options['data_path'] = 'input/adding/1470744860_200.pk'
+        options['data_path'] = ''
     elif T == 400:
-        options['data_path'] = 'input/adding/1470744994_400.pk'
+        options['data_path'] = ''
     elif T == 750:
-        options['data_path'] = 'input/adding/1470745056_750.pk'
+        options['data_path'] = ''
     else:
         options['data_path'] = ''
 elif options['task'] == 'memory':
     if T == 100:
-        options['data_path'] = 'input/memory/1470766867_100.pk'
+        options['data_path'] = ''
     elif T == 200:
-        options['data_path'] = 'input/memory/1470767064_200.pk'
+        options['data_path'] = ''
     elif T == 300:
-        options['data_path'] = 'input/memory/1470767409_300.pk'
+        options['data_path'] = ''
     elif T == 500:
-        options['data_path'] = 'input/memory/1470767936_500.pk'
+        options['data_path'] = ''
     else:
         options['data_path'] = ''
 elif options['task'] == 'mnist':
@@ -576,7 +577,7 @@ if options['task'] == 'adding' or options['task'] == 'mnist':
     print 'LSTM:\t\t40'
     print 'complex_RNN:\t128'
     print 'ortho_tanhRHH:\t20, 64'
-    print 'uRNN:\t30'
+    print 'uRNN:\t\t30'
 elif options['task'] == 'memory':
     print 'tanhRNN:\t128'
     print 'IRNN:\t\t128'
