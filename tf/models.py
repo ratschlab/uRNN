@@ -612,28 +612,28 @@ class uRNNCell(steph_RNNCell):
                 state_re = tf.slice(state, [0, 0], [-1, hidden_size])
                 state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
 
-                #Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
-                #Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
 #                Ustate_re = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
 #                Ustate_im = linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
 
+                LTRNN = False
+                if not LTRNN:
+                    Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
+                    Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+                    foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
+                    foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
+                    intermediate_re = foldin_re + Ustate_re
+                    intermediate_im = foldin_im + Ustate_im
+                    intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+                    new_state = tf.nn.tanh(intermediate_state, name='new_state')
+                else:
+                    Ustate_re = linear(state_re, hidden_size, bias=False, scope='Unitary/Transition/Real', init_val=self._init_re)
+                    Ustate_im = linear(state_im, hidden_size, bias=False, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+                    foldin_re = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Real')
+                    foldin_im = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Imaginary')
+                    intermediate_re = tf.nn.tanh(foldin_re) + Ustate_re
+                    intermediate_im = tf.nn.tanh(foldin_im) + Ustate_im
+                    new_state = tf.concat(1, [intermediate_re, intermediate_im], name='new_state')
 
-
-                #foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
-                #foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
-                #intermediate_re = foldin_re + Ustate_re
-                #intermediate_im = foldin_im + Ustate_im
-                #intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
-                #new_state = tf.nn.tanh(intermediate_state, name='new_state')
-                # testing... make it a LT-RNN...
-
-                Ustate_re = linear(state_re, hidden_size, bias=False, scope='Unitary/Transition/Real', init_val=self._init_re)
-                Ustate_im = linear(state_im, hidden_size, bias=False, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
-                foldin_re = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Real')
-                foldin_im = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Imaginary')
-                intermediate_re = tf.nn.tanh(foldin_re) + Ustate_re
-                intermediate_im = tf.nn.tanh(foldin_im) + Ustate_im
-                new_state = tf.concat(1, [intermediate_re, intermediate_im], name='new_state')
 
     # messing with relus right now
 #                new_state_re = tf.nn.relu(intermediate_re)
