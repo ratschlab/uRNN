@@ -482,6 +482,21 @@ class IRNNCell(steph_RNNCell):
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
 
+class LTRNNCell(steph_RNNCell):
+    def __call__(self, inputs, state, scope='LTRNN'):
+        """ 
+        Linear transition RNN as in
+            https://arxiv.org/abs/1602.06662
+            "Orthogonal RNNs and Long-Memory Tasks", Henaff, szlam, LeCun
+
+            state = sigmoid(linear(input) + bias) + linear(state)
+            output = linear(state)
+        """
+        with vs.variable_scope(scope):
+            new_state = tf.nn.sigmoid(linear(inputs, self._state_size, bias=True, scope='Linear/FoldIn')) + linear(state, self._state_size, bias=False, scope='Linear/Transition')
+            output = linear(new_state, self._output_size, bias=False, scope='Linear/Output')
+        return output, new_state
+
 class LSTMCell(steph_RNNCell):
     def __call__(self, inputs, state, scope='LSTM'):
         """
