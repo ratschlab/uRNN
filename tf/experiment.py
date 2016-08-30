@@ -34,6 +34,18 @@ SAVE_INTERNAL_GRADS = False
 
 # === fns === #
 
+def save_options(options):
+    """ so I can stop forgetting what learning rate I used... """
+    mname = options['identifier'] + '_' + options['model'] + '_T' + str(options['T']) + '_n' + str(options['state_size'])
+    mname.lstrip('_')
+    options_path = 'output/' + options['task'] + '/' + mname + '.options.txt'
+    print 'Saving run options to', options_path
+    options_file = open(options_path, 'w')
+    for (key, value) in options.iteritems():
+        options_file.write(key + ' ' + str(value) + '\n')
+    options_file.close()
+    return True
+
 def get_cost(outputs, y, loss_type='MSE'):
     """
     Either cross-entropy or MSE.
@@ -209,6 +221,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         mname = identifier + '_' + model + '_T' + str(T) + '_n' + str(state_size)
     else:
         mname = model + '_T' + str(T) + '_n' + str(state_size)
+  
     
     best_model_path = 'output/' + task + '/' + mname + '.best_model.ckpt'
     best_vali_cost = 1e6
@@ -580,4 +593,5 @@ for (key, value) in options.iteritems():
 # === now run (auto mode) === #
 AUTO = True
 if AUTO:
+    save_options(options)
     run_experiment(**options)
