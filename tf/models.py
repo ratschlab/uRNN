@@ -376,7 +376,11 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init
         #cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64, init_re=init_re, init_im=init_im)
         cell = uRNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype, init_re=init_re, init_im=init_im)
     elif cell_type == 'ortho_tanhRNN':
-        cell = tanhRNNCell(inpnt_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
+        cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
+    elif cell_type == 'LT-ORNN':
+        cell = LTRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype, orthogonal=True)
+    elif cell_type == 'LT-IRNN':
+        cell = LTRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype, orthogonal=False)
     else: 
         raise NotImplementedError
     state_0 = cell.zero_state(batch_size)
@@ -387,8 +391,6 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init
                 for input_ in tf.split(1, sequence_length, x)]
     else:
         inputs = tf.split(1, sequence_length, x)
-    # tf 0.7.0
-#    outputs, final_state = rnn.rnn(cell, inputs, initial_state=state_0)
     # tf 0.9.0
     outputs, final_state = tf.nn.rnn(cell, inputs, initial_state=state_0)
     return outputs
@@ -398,13 +400,14 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init
 #class steph_RNNCell(RNNCell):      # tf 0.7.0
 class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
     def __init__(self, input_size, state_size, output_size, state_dtype, 
-                 init_re=None, init_im=None):
+                 init_re=None, init_im=None, orthogonal=False):
         self._input_size = input_size
         self._state_size = state_size
         self._output_size = output_size
         self._state_dtype = state_dtype
         self._init_re = init_re
         self._init_im = init_im
+        self._orthogonal = orthogonal
 
     @property
     def input_size(self):
@@ -493,7 +496,15 @@ class LTRNNCell(steph_RNNCell):
             output = linear(state)
         """
         with vs.variable_scope(scope):
-            new_state = tf.nn.sigmoid(linear(inputs, self._state_size, bias=True, scope='Linear/FoldIn')) + linear(state, self._state_size, bias=False, scope='Linear/Transition')
+            if self._orthogonal:
+                # generate an orthogonal matrix to initialise RNN with
+                matrix = np.random.normal(size=(self._state_size, self._state_size))
+                init_V, _ = np.linalg.qr(matrix, mode='complete')
+                assert np.allclose(np.dot(init_V.T, init_V), np.identity(self._state_size))
+            else:
+                # initialise with identity
+                init_V = np.identity(self._state_size)
+            new_state = tf.nn.sigmoid(linear(inputs, self._state_size, bias=True, scope='Linear/FoldIn')) + linear(state, self._state_size, bias=False, scope='Linear/Transition', init_val=init_V)
             output = linear(new_state, self._output_size, bias=False, scope='Linear/Output')
         return output, new_state
 
