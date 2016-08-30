@@ -365,25 +365,31 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init
     batch_size = tf.shape(x)[0]
     if cell_type == 'tanhRNN':
         cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
+        state_0 = cell.zero_state(batch_size)
     elif cell_type == 'IRNN':
         cell = IRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
+        state_0 = cell.zero_state(batch_size)
     elif cell_type == 'LSTM':
         cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
+        state_0 = cell.zero_state(batch_size)
     elif cell_type == 'complex_RNN':
         #cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
         cell = complex_RNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
+        state_0 = cell.h0(batch_size)
     elif cell_type == 'uRNN':
         #cell = uRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64, init_re=init_re, init_im=init_im)
         cell = uRNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype, init_re=init_re, init_im=init_im)
+        state_0 = cell.h0(batch_size)
     elif cell_type == 'ortho_tanhRNN':
         cell = tanhRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype)
     elif cell_type == 'LT-ORNN':
         cell = LTRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype, orthogonal=True)
+        state_0 = cell.zero_state(batch_size)
     elif cell_type == 'LT-IRNN':
         cell = LTRNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=x.dtype, orthogonal=False)
+        state_0 = cell.zero_state(batch_size)
     else: 
         raise NotImplementedError
-    state_0 = cell.zero_state(batch_size)
     # split up the input so the RNN can accept it...
     # TODO DEBUG TESTING
     if input_size > 1:
@@ -438,9 +444,27 @@ class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
         """
         if dtype is None:
             dtype = self.state_dtype
-        zeros = tf.zeros(tf.pack([batch_size, self.state_size]), dtype=dtype)
-        zeros.set_shape([None, self.state_size])
+        zeros = tf.zeros(tf.pack([batch_size, self._state_size]), dtype=dtype)
+        zeros.set_shape([None, self._state_size])
         return zeros
+
+    def h0(self, batch_size, dtype=None):
+        """
+        Return state tensor (shape [batch_size x state_size]) filled with rv ~ unif(-sqrt(3/state_size), sqrt(3/state_size)
+
+        Args:
+            batch_size:     int, float, or unit Tensor representing the batch size.
+            state size:     int of the dimension of internal state (may be 2x hidden)
+            dtype:          the data type to use for the state
+                            (optional, if None use self.state_dtype)
+        Returns:
+            A 2D Tensor of shape [batch_size x state_size] filled with rv ~ unif(...)
+        """
+        if dtype is None:
+            dtype = self.state_dtype
+        bucket = np.sqrt(3/self._state_size)
+        first_state = tf.random_uniform([batch_size, self._state_size], minval=-bucket, maxval=bucket, dtype=dtype)
+        return first_state
 
     def __call__(self):
         """
