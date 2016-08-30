@@ -365,12 +365,6 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # no eigtrick required, no numerical gradients, all is fine
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 
-                #### DEBUG BLARGH
-#                oo = session.run(outputs, {x:batch_x, y:batch_y})
-#                print 'check outputs'
-#                pdb.set_trace()
-                #### DEBUG
-
                  # TODO ... this section can be retired soon-ish
                 if COMPARE_NUMERICAL_GRADIENT:
                     print 'comparing numerical and tensorflow gradients...'
@@ -454,6 +448,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                 if batch_index % 150 == 0:
                     print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
+
+                    # DEBUG
+                    pdb.set_trace()
+                    # END DEBUG
                     train_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(train_cost) + '\n')
                     vali_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_cost) + '\n')
                     train_trace_file.flush()
