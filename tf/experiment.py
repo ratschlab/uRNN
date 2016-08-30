@@ -36,8 +36,10 @@ SAVE_INTERNAL_GRADS = False
 
 def save_options(options):
     """ so I can stop forgetting what learning rate I used... """
-    mname = options['identifier'] + '_' + options['model'] + '_T' + str(options['T']) + '_n' + str(options['state_size'])
-    mname.lstrip('_')
+    if options['identifier']:
+        mname = options['identifier'] + '_' + options['model'] + '_T' + str(options['T']) + '_n' + str(options['state_size'])
+    else:
+        mname = options['model'] + '_T' + str(options['T']) + '_n' + str(options['state_size'])
     options_path = 'output/' + options['task'] + '/' + mname + '.options.txt'
     print 'Saving run options to', options_path
     options_file = open(options_path, 'w')
@@ -544,13 +546,13 @@ else:
 T = options['T']
 if options['task'] == 'adding':
     if T == 100:
-        options['data_path'] = 'input/adding/1472466146_100.pk'
+        options['data_path'] = 'input/adding/1470744790_100.pk'
     elif T == 200:
-        options['data_path'] = ''
+        options['data_path'] = 'input/adding/1470744860_200.pk'
     elif T == 400:
-        options['data_path'] = ''
+        options['data_path'] = 'input/adding/1470744994_400.pk'
     elif T == 750:
-        options['data_path'] = ''
+        options['data_path'] = 'input/adding/1470745056_750.pk'
     else:
         options['data_path'] = ''
 elif options['task'] == 'memory':
