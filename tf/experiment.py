@@ -203,9 +203,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     if verbose: print 'setting up RNN...'
     if model == 'uRNN':
         # generate initial lambdas
-        #lambdas = np.random.normal(size=(state_size*state_size))
-#        lambdas = np.random.normal(size=(state_size*state_size), scale=0.001)
-        lambdas = np.zeros(shape=(state_size*state_size)) + 1e-4
+        lambdas = np.random.normal(size=(state_size*state_size))
         # transpose because that's how it goes in the RNN
         Uinit = expm(lie_algebra_element(state_size, lambdas)).T
         Uinit_re = np.real(Uinit)
@@ -552,7 +550,7 @@ if options['task'] == 'adding':
         options['data_path'] = ''
 elif options['task'] == 'memory':
     if T == 100:
-        options['data_path'] = ''
+        options['data_path'] = 'input/memory/1472550931_100.pk'
     elif T == 200:
         options['data_path'] = ''
     elif T == 300:
