@@ -239,7 +239,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     train_trace_path = 'output/' + task + '/' + mname + '.train.txt'
     train_trace_file = open(train_trace_path, 'w')
     train_trace_file.write('epoch batch train_cost\n')
-    if task == 'mnist':
+    if 'mnist' in task:
         vali_acc_trace_path = 'output/' + task + '/' + mname + '.vali_acc.txt'
         vali_acc_trace_file = open(vali_acc_trace_path, 'w')
         vali_acc_trace_file.write('epoch batch vali_acc_cost\n')
@@ -467,7 +467,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     else:
                         print epoch, '\t', batch_index, '\t    VALI', loss_type + ':', vali_cost
 
-                    if task == 'mnist':
+                    if 'mnist' in task:
                         # get preds
                         last_outs = session.run(outputs[-1], {x: vali_data.x, y:vali_data.y})
                         class_predictions = np.argmax(np.exp(last_outs)/np.sum(np.exp(last_outs), axis=1).reshape(6000, -1), axis=1)
