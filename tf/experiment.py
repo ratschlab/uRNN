@@ -142,7 +142,7 @@ def update_step(cost, learning_rate, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)):
+def get_data(load_path, task, T, ntrain=int(1e6), nvali=int(1e4), ntest=int(1e4)):
     """
     Either load or generate data.
     """
@@ -154,6 +154,11 @@ def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)
             vali = ExperimentData(nvali, 'mnist_vali', T)
             test = ExperimentData(ntest, 'mnist_test', T)
             save_path = 'input/' + task + '/mnist.pk'
+        elif task == 'mnist_perm':
+            train = ExperimentData(ntrain, 'mnist_train', T, mnist_perm=True)
+            vali = ExperimentData(nvali, 'mnist_vali', T, mnist_perm=True)
+            test = ExperimentData(ntest, 'mnist_test', T, mnist_perm=True)
+            save_path = 'input/' + task + '/mnist_perm.pk'
         else:
             train = ExperimentData(ntrain, task, T)
             vali = ExperimentData(nvali, task, T)
@@ -194,7 +199,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         loss_type = 'CE'
         assert input_size == 10
         assert sequence_length == T + 20
-    elif task == 'mnist':
+    elif 'mnist' in task:
         output_size = 10
         loss_type = 'mnist'
         assert input_size == 1
@@ -222,6 +227,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     else:
         mname = model + '_T' + str(T) + '_n' + str(state_size)
   
+    # update options with path...?# 
+    options_path = 'output/' + options['task'] + '/' + mname + '.options.txt'
     
     best_model_path = 'output/' + task + '/' + mname + '.best_model.ckpt'
     best_vali_cost = 1e6
@@ -540,6 +547,7 @@ T = options['T']
 if options['task'] == 'adding':
     if T == 100:
         options['data_path'] = 'input/adding/1470744790_100.pk'
+        #options['data_path'] = ''
     elif T == 200:
         options['data_path'] = 'input/adding/1470744860_200.pk'
     elif T == 400:
@@ -561,6 +569,8 @@ elif options['task'] == 'memory':
         options['data_path'] = ''
 elif options['task'] == 'mnist':
     options['data_path'] = 'input/mnist/mnist.pk'    # (T is meaningless here...)
+elif options['task'] == 'mnist_perm':
+    options['data_path'] = 'input/mnist_perm/mnist_perm.pk'
 else:
     raise ValueError(options['task'])
 

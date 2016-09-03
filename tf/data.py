@@ -72,25 +72,37 @@ def generate_memory(T, num_examples, seq_len=10):
    
     return (x_onehot, y)
 
-def load_mnist(which='train'):
+def load_mnist(which='train', perm=False):
     """
     Load pre-serialised MNIST data.
     """
     directory = '/home/hyland/git/complex_RNN/tf/input/mnist/'
     print 'Loading', which, 'MNIST data from', directory
     if which == 'train':
-        x = np.load(directory + 'train_x.npy')
-        y = np.load(directory + 'train_y.npy')
+        if perm:
+            x = np.load(directory + 'train_x_perm.npy')
+            y = np.load(directory + 'train_y_perm.npy')
+        else:
+            x = np.load(directory + 'train_x.npy')
+            y = np.load(directory + 'train_y.npy')
     elif which == 'vali':
-        x = np.load(directory + 'vali_x.npy')
-        y = np.load(directory + 'vali_y.npy')
+        if perm:
+            x = np.load(directory + 'vali_x_perm.npy')
+            y = np.load(directory + 'vali_y_perm.npy')
+        else:
+            x = np.load(directory + 'vali_x.npy')
+            y = np.load(directory + 'vali_y.npy')
     elif which == 'test':
-        x = np.load(directory + 'test_x.npy')
-        y = np.load(directory + 'test_y.npy')
+        if perm:
+            x = np.load(directory + 'test_x_perm.npy')
+            y = np.load(directory + 'test_y_perm.npy')
+        else:
+            x = np.load(directory + 'test_x.npy')
+            y = np.load(directory + 'test_y.npy')
     return x, y
 
 class ExperimentData(object):
-    def __init__(self, N, experiment, T, test=False):
+    def __init__(self, N, experiment, T, test=False, mnist_perm=False):
         self.N = N
         if experiment == 'adding':
             self.x, self.y = generate_adding(T, N)
@@ -102,22 +114,31 @@ class ExperimentData(object):
             self.dtype = tf.int64
             self.input_size = 10
             self.sequence_length = self.x.shape[1]      # this is probably T+20
-        elif experiment == 'mnist_train':
-            self.x, self.y = load_mnist('train')
+        elif 'mnist_train' in experiment:
+            if mnist_perm:
+                self.x, self.y = load_mnist('train', perm=True)
+            else:
+                self.x, self.y = load_mnist('train')
             self.dtype = tf.int64
             self.input_size = 1
             self.sequence_length = 784  # (28*28)
             self.N = 54000              # N is hardcoded in MNIST
             assert self.N == self.x.shape[0]
-        elif experiment == 'mnist_vali':
-            self.x, self.y = load_mnist('vali')
+        elif 'mnist_vali' in experiment:
+            if mnist_perm:
+                self.x, self.y = load_mnist('vali', perm=True)
+            else:
+                self.x, self.y = load_mnist('vali')
             self.dtype = tf.int64
             self.input_size = 1
             self.sequence_length = 784  # (28*28)
             self.N = 6000               # N is hardcoded in MNIST
             assert self.N == self.x.shape[0]
-        elif experiment == 'mnist_test':
-            self.x, self.y = load_mnist('test')
+        elif 'mnist_test' in experiment:
+            if mnist_perm:
+                self.x, self.y = load_mnist('test', perm=True)
+            else:
+                self.x, self.y = load_mnist('test')
             self.dtype = tf.int64
             self.input_size = 1
             self.sequence_length = 784  # (28*28)
