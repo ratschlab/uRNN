@@ -10,7 +10,6 @@ from optimizations import *
 import argparse
 import pdb
 
-
 def generate_data(time_steps, n_data):
     # STEPH: n_data is n_train or n_test
     #   time_steps is the length of the sequence, I think
@@ -46,7 +45,7 @@ def generate_data(time_steps, n_data):
 
     
     
-def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, input_type, out_every_t, loss_function):
+def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, input_type, out_every_t, loss_function, input_path):
     
     # --- Set data params ----------------
     n_input = 2
@@ -57,9 +56,18 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
   
 
     # --- Create data --------------------
-    train_x, train_y = generate_data(time_steps, n_train)
-    test_x, test_y = generate_data(time_steps, n_test)
- 
+    # STEPH: actually, load data
+    if input_path:
+        print 'Loading data from', input_path 
+        load_dict = cPickle.load(open(input_path, 'rb'))
+        train = load_dict['train']
+        train_x, train_y = train.x, train.y
+        # to compare, actually use validation data
+        vali = load_dict['vali']
+        test_x, test_y = vali.x, vali.y
+    else:
+        train_x, train_y = generate_data(time_steps, n_train)
+        test_x, test_y = generate_data(time_steps, n_test)
 
     s_train_x = theano.shared(train_x)
     s_train_y = theano.shared(train_y)
