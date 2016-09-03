@@ -454,7 +454,7 @@ class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
 
         Args:
             batch_size:     int, float, or unit Tensor representing the batch size.
-            state size:     int of the dimension of internal state (may be 2x hidden)
+            state size:     int of the dimension of internal state (may be 2x hidden in complex case)
             dtype:          the data type to use for the state
                             (optional, if None use self.state_dtype)
         Returns:
@@ -613,7 +613,7 @@ class complex_RNNCell(steph_RNNCell):
             else:
                 # state is [state_re, state_im]
                 step1_re, step1_im = times_diag(state, self._state_size, scope='Diag/First', real=True, split=True)             # gradient is fine
-                step2 = tf.batch_fft(tf.complex(step1_re, step1_im), name='FFT')            # gradient looks ok
+                step2 = tf.div(tf.batch_fft(tf.complex(step1_re, step1_im)), np.sqrt(self._state_size/2), name='FFT')            # gradient looks ok
                 step3_re, step3_im = reflection(step2, self._state_size/2, scope='Reflection/First', real=True, split=True)      # gradient looks ok, but is it giving the right reflection formula?
                 permutation = vs.get_variable("Permutation", dtype=tf.float32, 
                                               initializer=tf.constant(np.random.permutation(np.eye(self._state_size/2, dtype=np.float32))),
@@ -622,7 +622,7 @@ class complex_RNNCell(steph_RNNCell):
                 step4_im = tf.matmul(step3_im, permutation)
 #                step4 = tf.concat(1, [step4_re, step4_im])
                 step5_re, step5_im = times_diag((step4_re, step4_im), self._state_size, scope='Diag/Second', real=True, split=True)
-                step6 = tf.batch_ifft(tf.complex(step5_re, step5_im), name='FFT')
+                step6 = tf.div(tf.batch_ifft(tf.complex(step5_re, step5_im)), np.sqrt(self._state_size/2), name='IFFT')
                 step7 = reflection(step6, self._state_size/2, scope='Reflection/Second', real=True, split=False)
                 step8 = times_diag(step7, self._state_size, scope='Diag/Third', real=True, split=False)
                 
