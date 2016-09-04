@@ -142,7 +142,7 @@ def update_step(cost, learning_rate, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-def get_data(load_path, task, T, ntrain=int(1e6), nvali=int(1e4), ntest=int(1e4)):
+def get_data(load_path, task, T, ntrain=int(1e7), nvali=int(1e4), ntest=int(1e4)):
     """
     Either load or generate data.
     """
@@ -163,7 +163,7 @@ def get_data(load_path, task, T, ntrain=int(1e6), nvali=int(1e4), ntest=int(1e4)
             train = ExperimentData(ntrain, task, T)
             vali = ExperimentData(nvali, task, T)
             test = ExperimentData(ntest, task, T)
-            save_path = 'input/' + task + '/' + str(int(time())) + '_' + str(T) + '.pk'
+            save_path = 'input/' + task + '/' + str(ntrain) + '_' + str(nvali) + '_' + str(int(time())) + '_' + str(T) + '.pk'
         print '...generating and saving to', save_path
         save_dict = {'train': train, 'vali': vali, 'test': test}
         cPickle.dump(save_dict, open(save_path, 'wb'))
@@ -490,7 +490,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 #                                 cPickle.HIGHEST_PROTOCOL)
 #                    if verbose: print 'finished saving!'
 
-                if batch_index % 500 and model == 'uRNN':
+                if batch_index % 500 == 0 and model == 'uRNN':
                     lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
 
                 # calculate gradients of cost with respect to internal states
@@ -546,8 +546,9 @@ else:
 T = options['T']
 if options['task'] == 'adding':
     if T == 100:
-        options['data_path'] = 'input/adding/1470744790_100.pk'
-        #options['data_path'] = ''
+        #options['data_path'] = 'input/adding/1470744790_100.pk'
+#        options['data_path'] = ''
+        options['data_path'] = 'input/adding/10000000_10000_1472949986_100.pk'
     elif T == 200:
         options['data_path'] = 'input/adding/1470744860_200.pk'
     elif T == 400:
@@ -560,11 +561,11 @@ elif options['task'] == 'memory':
     if T == 100:
         options['data_path'] = 'input/memory/1472550931_100.pk'
     elif T == 200:
-        options['data_path'] = ''
+        options['data_path'] = 'input/memory/1470767064_200.pk'
     elif T == 300:
-        options['data_path'] = ''
+        options['data_path'] = 'input/memory/1470767409_300.pk'
     elif T == 500:
-        options['data_path'] = ''
+        options['data_path'] = 'input/memory/1470767936_500.pk'
     else:
         options['data_path'] = ''
 elif options['task'] == 'mnist':
