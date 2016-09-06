@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import theano, cPickle
 import theano.tensor as T
 import numpy as np

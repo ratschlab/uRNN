@@ -45,7 +45,8 @@ def generate_data(time_steps, n_data):
 
     
     
-def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, input_type, out_every_t, loss_function, input_path):
+def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, 
+         model, input_type, out_every_t, loss_function, input_path):
     
     # --- Set data params ----------------
     n_input = 2
@@ -149,7 +150,6 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     # YOLO
     print 'pretrain...'
     print updates
-    pdb.set_trace()
     # DEYOLO
 
     # --- Training Loop ---------------------------------------------------------------
@@ -168,10 +168,9 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
             s_train_y.set_value(data_y[inds,:])
 
         # YOLO
-        for p in parameters:
-            print p.name
-            print p.get_value()
-            pdb.set_trace()
+#        for p in parameters:
+#            print p.name
+#            print p.get_value()
         # DEYOLO
 
         mse = train(i % int(num_batches))
@@ -220,15 +219,17 @@ if __name__=="__main__":
         description="training a model")
     parser.add_argument("--n_iter", type=int, default=20000)
     parser.add_argument("--n_batch", type=int, default=20)
-    parser.add_argument("--n_hidden", type=int, default=512)
+    #parser.add_argument("--n_hidden", type=int, default=512)
+    parser.add_argument("--n_hidden", type=int, default=10)
     parser.add_argument("--time_steps", type=int, default=200)
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--savefile", default='adding_test')
-    parser.add_argument("--model", default='orthogonal_RNN')
+    parser.add_argument("--model", default='complex_RNN')
     parser.add_argument("--input_type", default='real')
     parser.add_argument("--out_every_t", default='False')
     parser.add_argument("--loss_function", default='MSE')
-    
+    parser.add_argument("--input_path", default="")
+
     args = parser.parse_args()
     dict = vars(args)
     # STEPH: argh bad naming here, dict is a built-in name in python !!
@@ -242,7 +243,8 @@ if __name__=="__main__":
               'model': dict['model'],
               'input_type': dict['input_type'],              
               'out_every_t': 'True'==dict['out_every_t'],
-              'loss_function': dict['loss_function']}
+              'loss_function': dict['loss_function'],
+              'input_path': dict['input_path']}
     
     # STEPH:
     # # force sanity on the arguments
