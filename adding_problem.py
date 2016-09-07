@@ -10,6 +10,9 @@ from optimizations import *
 import argparse
 import pdb
 
+import cPickle
+import data
+
 def generate_data(time_steps, n_data):
     # STEPH: n_data is n_train or n_test
     #   time_steps is the length of the sequence, I think
@@ -63,9 +66,12 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile,
         load_dict = cPickle.load(open(input_path, 'rb'))
         train = load_dict['train']
         train_x, train_y = train.x, train.y
+        # fix the axes
+        train_x = np.swapaxes(train_x, 0, 1)
         # to compare, actually use validation data
         vali = load_dict['vali']
         test_x, test_y = vali.x, vali.y
+        test_x = np.swapaxes(test_x, 0, 1)
     else:
         train_x, train_y = generate_data(time_steps, n_train)
         test_x, test_y = generate_data(time_steps, n_test)
@@ -152,6 +158,12 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile,
     print updates
     # DEYOLO
 
+    # --- prepare logging... ---#
+    train_trace_file = open(savefile + '.train.txt', 'w')
+    train_trace_file.write('epoch batch train_cost\n')
+    vali_trace_file = open(savefile + '.vali.txt', 'w')
+    vali_trace_file.write('epoch batch vali_cost\n')
+
     # --- Training Loop ---------------------------------------------------------------
 
     train_loss = []
@@ -173,29 +185,41 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile,
 #            print p.get_value()
         # DEYOLO
 
-        mse = train(i % int(num_batches))
+        train_mse = train(i % int(num_batches))
         # STEPH: remember, input of train is the batch number, 
         #   and output is costs[0]
-        train_loss.append(mse)
+        train_loss.append(train_mse)
         print "Iteration:", i
-        print "mse:", mse
+        print "mse:", train_mse
         print
 
         if (i % 50==0):
-            mse = test()
+            test_mse = test()
             # STEPH: test takes no inputs, as it is a fixed test set
             print
             print "TEST"
-            print "mse:", mse
+            print "mse:", test_mse
             print 
-            test_loss.append(mse)
+            test_loss.append(test_mse)
 
-            if mse < best_test_loss:
+            if test_mse < best_test_loss:
                 best_params = [p.get_value() for p in parameters]
                 best_rms = [r.get_value() for r in rmsprop]                
-                best_test_loss = mse
+                best_test_loss = test_mse
 
-            
+           
+            ### writing to file ###
+            # (copying naming scheme from tf version)
+            batch_index = i % int(num_batches)
+            epoch = i / int(num_batches)
+            train_cost = train_mse
+            vali_cost = test_mse
+            train_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(train_cost) + '\n')
+            vali_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_cost) + '\n')
+            train_trace_file.flush()
+            vali_trace_file.flush()
+    
+            # i will retire this eventually #
             save_vals = {'parameters': [p.get_value() for p in parameters],
                          'rmsprop': [r.get_value() for r in rmsprop],
                          'train_loss': train_loss,
@@ -219,11 +243,11 @@ if __name__=="__main__":
         description="training a model")
     parser.add_argument("--n_iter", type=int, default=20000)
     parser.add_argument("--n_batch", type=int, default=20)
-    #parser.add_argument("--n_hidden", type=int, default=512)
-    parser.add_argument("--n_hidden", type=int, default=10)
-    parser.add_argument("--time_steps", type=int, default=200)
+    parser.add_argument("--n_hidden", type=int, default=512)
+    #parser.add_argument("--n_hidden", type=int, default=80)
+    parser.add_argument("--time_steps", type=int, default=100)
     parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--savefile", default='adding_test')
+    parser.add_argument("--savefile", default='addingT100_tf')
     parser.add_argument("--model", default='complex_RNN')
     parser.add_argument("--input_type", default='real')
     parser.add_argument("--out_every_t", default='False')
@@ -233,6 +257,21 @@ if __name__=="__main__":
     args = parser.parse_args()
     dict = vars(args)
     # STEPH: argh bad naming here, dict is a built-in name in python !!
+
+    # same data as I'm using in the TF experiments...
+    if dict['time_steps'] == 100:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/adding/1470744790_100.pk'
+    elif dict['time_steps'] == 200:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/adding/1470744860_200.pk'
+    elif dict['time_steps'] == 400:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/adding/1470744994_400.pk'
+    elif dict['time_steps'] == 750:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/adding/1470745056_750.pk'
+    else:
+        raise ValueError(dict['time_steps'])
+
+    ### debug
+#    dict['input_path'] = ''
 
     kwargs = {'n_iter': dict['n_iter'],
               'n_batch': dict['n_batch'],
@@ -245,7 +284,13 @@ if __name__=="__main__":
               'out_every_t': 'True'==dict['out_every_t'],
               'loss_function': dict['loss_function'],
               'input_path': dict['input_path']}
-    
+   
+    # save options
+    options_file = open(dict['savefile'] + '.options.txt', 'w')
+    for (key, val) in kwargs.iteritems():
+        options_file.write(key + ' ' + str(val) + '\n')
+    options_file.close()
+
     # STEPH:
     # # force sanity on the arguments
     ERR = False
