@@ -63,9 +63,10 @@ def times_diag(arg, state_size, scope=None, real=False, split=False):
             intermediate_re = tf.matmul(state_re, diag_re) - tf.matmul(state_im, diag_im)
             intermediate_im = tf.matmul(state_im, diag_re) + tf.matmul(state_re, diag_im)
 
-            result = tf.concat(1, [intermediate_re, intermediate_im])
             if split:
                 result = intermediate_re, intermediate_im
+            else:
+                result = tf.concat(1, [intermediate_re, intermediate_im])
     return result
 
 def reflection(state, state_size, scope=None, theano_reflection=False, real=False, split=False):
@@ -92,6 +93,7 @@ def reflection(state, state_size, scope=None, theano_reflection=False, real=Fals
 
         if real:
             # operation before this is fft, so...
+            # ... not actually expecting a real state, isn't that fun
             state_re = tf.real(state)
             state_im = tf.imag(state)
             
@@ -143,8 +145,8 @@ def reflection(state, state_size, scope=None, theano_reflection=False, real=Fals
             # return_re = state_re - (2/vstarv)(d - c)
             # return_im = state_im - (2/vstarv)(a + b)
 
-            new_state_re = state_re - (2.0 / vstarv) * (d - c)
-            new_state_im = state_im - (2.0 / vstarv) * (a + b)
+            new_state_re = state_re - (2.0 / vstarv) * (a + b)
+            new_state_im = state_im - (2.0 / vstarv) * (d - c)
             new_state = tf.complex(new_state_re, new_state_im)
             return new_state
         else:
@@ -675,6 +677,7 @@ class uRNNCell(steph_RNNCell):
                     intermediate_im = foldin_im + Ustate_im
                     intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
                     new_state = tf.nn.tanh(intermediate_state, name='new_state')
+                    #new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
                 else:
                     Ustate_re = linear(state_re, hidden_size, bias=False, scope='Unitary/Transition/Real', init_val=self._init_re)
                     Ustate_im = linear(state_im, hidden_size, bias=False, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
