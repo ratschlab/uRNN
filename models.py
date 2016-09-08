@@ -168,6 +168,7 @@ def times_reflection(input, n_hidden, reflection):
     input_im_reflect_im = T.dot(input_im, reflect_im)
     # βν
 
+#
     a = T.outer(input_re_reflect_re - input_im_reflect_im, reflect_re)
     # outer(αμ - βν, mu)
     b = T.outer(input_re_reflect_im + input_im_reflect_re, reflect_im)
@@ -182,7 +183,7 @@ def times_reflection(input, n_hidden, reflection):
     output = T.inc_subtensor(output[:, n_hidden:], - 2. / vstarv * (d - c))
 
     return output
-
+#
 def compute_cost_t(lin_output, loss_function, y_t):
     if loss_function == 'CE':
         RNN_output = T.nnet.softmax(lin_output)
