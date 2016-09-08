@@ -16,6 +16,7 @@ import pdb
 import cPickle
 import argparse
 from time import time
+import sys
 
 # local imports
 from models import RNN
@@ -30,6 +31,7 @@ import cProfile
 
 DO_TEST = False
 COMPARE_NUMERICAL_GRADIENT = False
+#SAVE_INTERNAL_GRADS = True
 SAVE_INTERNAL_GRADS = False
 
 # === fns === #
@@ -247,7 +249,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     if SAVE_INTERNAL_GRADS:
         hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
         hidden_gradients_file = open(hidden_gradients_path, 'w')
-        hidden_gradients_file.write('batch ' + ' '.join(map(str, xrange(train_data.sequence_length))) + '\n')
+        hidden_gradients_file.write('batch k norm\n')
+        hidden_states_path = 'output/' + task + '/' + mname + '.hidden_states.txt'
+        hidden_states_file = open(hidden_states_path, 'w')
+        hidden_states_file.write('batch k value what\n')
 
     # === ops for training === #
     if verbose: print 'setting up train ops...'
@@ -304,7 +309,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.25
+    config.gpu_options.per_process_gpu_memory_fraction = 1.0
 
     # === let's do it! === #
     if verbose: print 'initialising session...'
@@ -320,14 +325,14 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         if SAVE_INTERNAL_GRADS:
             graph_ops = session.graph.get_operations()
             internal_grads = [None]*train_data.sequence_length
-            internal_norms = np.zeros(shape=train_data.sequence_length)
+            internal_states = [None]*train_data.sequence_length
             o_counter = 0
             for o in graph_ops:
                 if 'new_state' in o.name and not 'grad' in o.name:
                     # internal state
                     internal_grads[o_counter] = tf.gradients(cost, o.values()[0])[0]
+                    internal_states[o_counter] = o.values()[0]
                     o_counter += 1
-            pdb.set_trace()
             assert o_counter == train_data.sequence_length
 
         # === train loop === #
@@ -498,12 +503,25 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                 if SAVE_INTERNAL_GRADS and (batch_index == 0 or batch_index == 100):
                     print 'calculating internal gradients...'
                     internal_grads_np = session.run(internal_grads, {x:batch_x, y:batch_y})
+                    print 'calculating internal states...'
+                    internal_states_np = session.run(internal_states, {x:batch_x, y:batch_y})
                     # get norms of each gradient vector, then average over the batch
                     for (k, grad_at_k) in enumerate(internal_grads_np):
                         norm_at_k = np.mean(np.linalg.norm(grad_at_k, axis=1))
-                        internal_norms[k] = norm_at_k
-                    hidden_gradients_file.write(str(batch_index) + ' ' + ' '.join(map(str, internal_norms)) + '\n')
+                        hidden_gradients_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(norm_at_k) + '\n')
+                    # this is actually batch_size final states...
+                    final_state = internal_states_np[-1]
+                    for (k, state_batch) in enumerate(internal_states_np):
+                        diff  = final_state - state_batch
+                        mean_norm = np.mean(np.linalg.norm(state_batch, axis=1))
+                        # get the norm of the difference, then average over the batch
+                        mean_diff_norm = np.mean(np.linalg.norm(diff, axis=1))
+                        hidden_states_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(mean_diff_norm) + ' diff\n')
+                        hidden_states_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(mean_norm) + ' norm\n')
                     hidden_gradients_file.flush()
+                    hidden_states_file.flush()
+                    if batch_index == 100:
+                        sys.exit('finished recording hidden state info')
 
         print 'Training completed.'
         if DO_TEST:
@@ -541,14 +559,16 @@ if options['model'] in {'complex_RNN', 'ortho_tanhRNN', 'uRNN'}:
     options['gradient_clipping'] = False
 else:
     options['gradient_clipping'] = True
+    # turning off gradient clipping... 
+#    options['gradient_clipping'] = False
 
 # --- load pre-calculated data --- #
 T = options['T']
 if options['task'] == 'adding':
     if T == 100:
-        #options['data_path'] = 'input/adding/1470744790_100.pk'
+        options['data_path'] = 'input/adding/1470744790_100.pk'
 #        options['data_path'] = ''
-        options['data_path'] = 'input/adding/10000000_10000_1472949986_100.pk'
+#        options['data_path'] = 'input/adding/10000000_10000_1472949986_100.pk'
     elif T == 200:
         options['data_path'] = 'input/adding/1470744860_200.pk'
     elif T == 400:
