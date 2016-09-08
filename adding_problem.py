@@ -189,7 +189,7 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile,
         # STEPH: remember, input of train is the batch number, 
         #   and output is costs[0]
         train_loss.append(train_mse)
-        print "Iteration:", i
+        print "Iteration:", i, "(adding) (T =", time_steps, ")"
         print "mse:", train_mse
         print
 
@@ -245,9 +245,9 @@ if __name__=="__main__":
     parser.add_argument("--n_batch", type=int, default=20)
     parser.add_argument("--n_hidden", type=int, default=512)
     #parser.add_argument("--n_hidden", type=int, default=80)
-    parser.add_argument("--time_steps", type=int, default=100)
+    parser.add_argument("--time_steps", type=int, default=750)
     parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--savefile", default='addingT100_tf')
+    parser.add_argument("--savefile", default='addingT750_tf')
     parser.add_argument("--model", default='complex_RNN')
     parser.add_argument("--input_type", default='real')
     parser.add_argument("--out_every_t", default='False')

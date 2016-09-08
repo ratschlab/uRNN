@@ -35,7 +35,7 @@ def generate_data(time_steps, n_data, n_sequence):
     return x.T, y.T
 
     
-def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, input_type, out_every_t, loss_function):
+def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, input_type, out_every_t, loss_function, input_path):
 
     # --- Set data params ----------------
     n_input = 10
@@ -47,8 +47,23 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
   
 
     # --- Create data --------------------
-    train_x, train_y = generate_data(time_steps, n_train, n_sequence)
-    test_x, test_y = generate_data(time_steps, n_test, n_sequence)
+    if input_path:
+        print 'Loading data from', input_path
+        load_dict = cPickle.load(open(input_path, 'rb'))
+        train = load_dict['train']
+        train_x, train_y = train.x, train.y
+        # the input data is one-hot, need to convert
+        # axes: input seq, batch, one-hot-encoding
+        train_x = np.int32(np.argmax(train_x, axis=2)).T
+        train_y = np.int32(train_y).T
+        # to compare, actually use validation data
+        vali = load_dict['vali']
+        test_x, test_y = vali.x, vali.y
+        test_x = np.int32(np.argmax(test_x, axis=2)).T
+        test_y = np.int32(test_y).T
+    else:
+        train_x, train_y = generate_data(time_steps, n_train, n_sequence)
+        test_x, test_y = generate_data(time_steps, n_test, n_sequence)
 
     s_train_x = theano.shared(train_x)
     s_train_y = theano.shared(train_y)
@@ -117,8 +132,14 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     givens_test = {inputs[0] : s_test_x,
                    inputs[1] : s_test_y}
     
-    train = theano.function([index], [costs[0], printed_V], givens=givens, updates=updates)
+    train = theano.function([index], [costs[0]], givens=givens, updates=updates)
     test = theano.function([], [costs[0], costs[1]], givens=givens_test)
+
+    # --- prepare logging --- #
+    train_trace_file = open(savefile + '.train.txt', 'w')
+    train_trace_file.write('epoch batch train_cost\n')
+    vali_trace_file = open(savefile + '.vali.txt', 'w')
+    vali_trace_file.write('epoch batch vali_cost\n')
 
     # --- Training Loop ---------------------------------------------------------------
 
@@ -137,29 +158,41 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
             data_y = s_train_y.get_value()
             s_train_y.set_value(data_y[:,inds])
 
-        ce = train(i % num_batches)
+        train_ce = train(i % num_batches)
         # STEPH: reporting cross-entropy and not MSE, this time (in theory)
         #   the loss function isn't actually specified explicitly here, but
         #   it is presumably cross entropy...
-        train_loss.append(ce)
-        print "Iteration:", i
-        print "cross entropy:", ce
+        train_loss.append(train_ce)
+        print "Iteration:", i, "(memory) (T =", time_steps, ")"
+        print "cross entropy:", train_ce
         print
 
         if (i % 50==0):
-            ce, acc = test()
+            test_ce, acc = test()
             print
             print "TEST"
-            print "cross entropy:", ce
+            print "cross entropy:", test_ce
             print 
-            test_loss.append(ce)
+            test_loss.append(test_ce)
             test_acc.append(acc)
 
-            if ce < best_test_loss:
+            if test_ce < best_test_loss:
                 best_params = [p.get_value() for p in parameters]
                 best_rms = [r.get_value() for r in rmsprop]
-                best_test_loss = ce
+                best_test_loss = test_ce
 
+            ### writing to file ###
+            # (copying naming scheme from tf version)
+            batch_index = i % int(num_batches)
+            epoch = i / int(num_batches)
+            train_cost = train_ce
+            vali_cost = test_ce
+            train_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(train_cost) + '\n')
+            vali_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_cost) + '\n')
+            train_trace_file.flush()
+            vali_trace_file.flush()
+
+            # i will retire this eventually #
             save_vals = {'parameters': [p.get_value() for p in parameters],
                          'rmsprop': [r.get_value() for r in rmsprop],
                          'train_loss': train_loss,
@@ -181,18 +214,35 @@ if __name__=="__main__":
         description="training a model")
     parser.add_argument("--n_iter", type=int, default=20000)
     parser.add_argument("--n_batch", type=int, default=20)
-    parser.add_argument("--n_hidden", type=int, default=512)
-    parser.add_argument("--time_steps", type=int, default=200)
+    parser.add_argument("--n_hidden", type=int, default=128)
+    parser.add_argument("--time_steps", type=int, default=500)
     parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--savefile", default='memory_test')
-    parser.add_argument("--model", default='orthogonal_RNN')
+    parser.add_argument("--savefile", default='memory500_tf')
+    parser.add_argument("--model", default='complex_RNN')
     parser.add_argument("--input_type", default='categorical')
     parser.add_argument("--out_every_t", default='True')
     parser.add_argument("--loss_function", default='CE')
+    parser.add_argument("--input_path", default="")
 
     args = parser.parse_args()
     dict = vars(args)
+    
+    # same data as I'm using in the TF experiments...
+    if dict['time_steps'] == 100:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/memory/1470766867_100.pk'
+    elif dict['time_steps'] == 200:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/memory/1470767064_200.pk'
+    elif dict['time_steps'] == 300:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/memory/1470767409_300.pk'
+    elif dict['time_steps'] == 500:
+        dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/memory/1470767936_500.pk'
+    else:
+        raise ValueError(dict['time_steps'])
 
+    # debug
+#    dict['input_path'] = ''
+    # dedebug
+    
     kwargs = {'n_iter': dict['n_iter'],
               'n_batch': dict['n_batch'],
               'n_hidden': dict['n_hidden'],
@@ -202,7 +252,8 @@ if __name__=="__main__":
               'model': dict['model'],
               'input_type': dict['input_type'],
               'out_every_t': 'True'==dict['out_every_t'],
-              'loss_function': dict['loss_function']}
+              'loss_function': dict['loss_function'],
+              'input_path': dict['input_path']}
 
     # STEPH: since this is _memory problem_, only some settings are allowed!
     # ( I could probably enforce this during parsing, too )
