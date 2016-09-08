@@ -238,10 +238,6 @@ if __name__=="__main__":
         dict['input_path'] = '/home/hyland/git/complex_RNN/tf/input/memory/1470767936_500.pk'
     else:
         raise ValueError(dict['time_steps'])
-
-    # debug
-#    dict['input_path'] = ''
-    # dedebug
     
     kwargs = {'n_iter': dict['n_iter'],
               'n_batch': dict['n_batch'],
@@ -255,6 +251,12 @@ if __name__=="__main__":
               'loss_function': dict['loss_function'],
               'input_path': dict['input_path']}
 
+    # save options
+    options_file = open(dict['savefile'] + '.options.txt', 'w')
+    for (key, val) in kwargs.iteritems():
+        options_file.write(key + ' ' + str(val) + '\n')
+    options_file.close()
+        
     # STEPH: since this is _memory problem_, only some settings are allowed!
     # ( I could probably enforce this during parsing, too )
     ERR = False
