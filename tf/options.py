@@ -102,12 +102,12 @@ def complex_RNN_loss(parameters, batch, permutation, theano_reflection=False):
 
     # === do the transformation === #
     step1 = np.dot(x, diag1)
-    step2 = fft(step1)
+    step2 = fft(step1)/np.sqrt(d)
     step3 = complex_reflection(step2, reflection1_re, reflection1_im, theano_reflection)
     #step3 = step2
     step4 = np.dot(step3, permutation)
     step5 = np.dot(step4, diag2)
-    step6 = ifft(step5)
+    step6 = np.sqrt(d)*ifft(step5)
     step7 = complex_reflection(step6, reflection2_re, reflection2_im, theano_reflection)
     #step7 = step6
     step8 = np.dot(step7, diag3)
