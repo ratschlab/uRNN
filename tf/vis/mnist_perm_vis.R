@@ -5,7 +5,7 @@ library(ggplot2)
 base_dir<-"/home/hyland/git/complex_RNN/tf/output/mnist_perm"
 
 # --- IRNN --- #
-IRNN_trace<-read.table(paste0(base_dir, "/IRNN_T100_n100.vali_acc.txt"), header=TRUE)
+IRNN_trace<-read.table(paste0(base_dir, "/lr1e-6_IRNN_T100_n100.vali_acc.txt"), header=TRUE)
 batch_size<-16
 batch_skip<-150
 num_updates <- batch_skip * seq(nrow(IRNN_trace))
