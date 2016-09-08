@@ -69,7 +69,7 @@ def times_diag(arg, state_size, scope=None, real=False, split=False):
                 result = tf.concat(1, [intermediate_re, intermediate_im])
     return result
 
-def reflection(state, state_size, scope=None, theano_reflection=False, real=False, split=False):
+def reflection(state, state_size, scope=None, theano_reflection=True, real=False, split=False):
     """
     I do not entirely trust or believe the reflection operator in the theano version. :/
     TODO: indeed, it is wrong, wrongish.
@@ -106,19 +106,28 @@ def reflection(state, state_size, scope=None, theano_reflection=False, real=Fals
 
             # tf.matmul with transposition is the same as T.outer
             # we need something of the shape [batch_size, state_size] in the end
-            a = tf.matmul(state_re_reflect_re + state_im_reflect_im, reflect_re, transpose_b=True)
-            b = tf.matmul(state_im_reflect_re - state_re_reflect_im, reflect_im, transpose_b=True)
-            c = tf.matmul(state_im_reflect_re - state_re_reflect_im, reflect_re, transpose_b=True)
-            d = tf.matmul(state_re_reflect_re + state_im_reflect_im, reflect_im, transpose_b=True)
-
-            new_state_re = state_re - (2.0 / vstarv) * (a - b)
-            new_state_im = state_im - (2.0 / vstarv) * (c + d)
+            if theano_reflection:
+                a = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_re, transpose_b=True)
+                b = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_im, transpose_b=True)
+                c = tf.matmul(state_re_reflect_re - state_im_reflect_im, reflect_im, transpose_b=True)
+                d = tf.matmul(state_re_reflect_im + state_im_reflect_re, reflect_re, transpose_b=True)
+                new_state_re = state_re - (2.0 / vstarv) * (a + b)
+                new_state_im = state_im - (2.0 / vstarv) * (d - c)
+            else:
+                # TODO double-triple-check the maths here, blegh
+                a = tf.matmul(state_re_reflect_re + state_im_reflect_im, reflect_re, transpose_b=True)
+                b = tf.matmul(state_im_reflect_re - state_re_reflect_im, reflect_im, transpose_b=True)
+                c = tf.matmul(state_im_reflect_re - state_re_reflect_im, reflect_re, transpose_b=True)
+                d = tf.matmul(state_re_reflect_re + state_im_reflect_im, reflect_im, transpose_b=True)
+                new_state_re = state_re - (2.0 / vstarv) * (a - b)
+                new_state_im = state_im - (2.0 / vstarv) * (c + d)
             if split:
                 return new_state_re, new_state_im
             else:
                 return tf.concat(1, [new_state_re, new_state_im])
 
         elif theano_reflection:
+            raise NotImplementedError
             # NOTE: I am *directly copying* what they do in the theano code (inasmuch as one can in TF),
             #       (s/input/state/g)
             # even though I think the maths might be incorrect, see this issue: https://github.com/amarshah/complex_RNN/issues/2
@@ -624,7 +633,7 @@ class complex_RNNCell(steph_RNNCell):
                 step4_im = tf.matmul(step3_im, permutation)
 #                step4 = tf.concat(1, [step4_re, step4_im])
                 step5_re, step5_im = times_diag((step4_re, step4_im), self._state_size, scope='Diag/Second', real=True, split=True)
-                step6 = tf.div(tf.batch_ifft(tf.complex(step5_re, step5_im)), np.sqrt(self._state_size/2), name='IFFT')
+                step6 = tf.mul(tf.batch_ifft(tf.complex(step5_re, step5_im)), np.sqrt(self._state_size/2), name='IFFT')
                 step7 = reflection(step6, self._state_size/2, scope='Reflection/Second', real=True, split=False)
                 step8 = times_diag(step7, self._state_size, scope='Diag/Third', real=True, split=False)
                 
