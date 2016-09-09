@@ -170,7 +170,7 @@ def reflection(state, state_size, scope=None, theano_reflection=True, real=False
             new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
             return new_state
 
-def tanh_mod(state, scope=None, name=None):
+def tanh_mod(x_vals, y_vals, scope=None, name=None):
     """
     tanh for complex-valued state
     (just applies it to the modulus of the state, leaves phase intact)
@@ -178,12 +178,9 @@ def tanh_mod(state, scope=None, name=None):
     assumes input is [batch size, 2*d]
     the second half of the columns are the imaginary parts
     """
-    state_size = state.get_shape()[1]
+    state_size = x_vals.get_shape()[1]
     hidden_size = state_size/2
     with vs.variable_scope(scope or "tanh_mod"):
-        x_vals = tf.slice(state, [0, 0], [-1, hidden_size])
-        y_vals = tf.slice(state, [0, hidden_size], [-1, hidden_size])
-        # r
         r = tf.sqrt(x_vals**2 + y_vals**2)
         r_scaled = tf.nn.tanh(r)
         # use half angle formula to get... angles
@@ -192,7 +189,7 @@ def tanh_mod(state, scope=None, name=None):
         # now recalculate the xes and ys
         x_scaled = tf.mul(r_scaled, tf.cos(angle))
         y_scaled = tf.mul(r_scaled, tf.sin(angle))
-        output = tf.concat(0, [x_scaled, y_scaled], name='new_state')
+        output = tf.concat(1, [x_scaled, y_scaled], name='new_state')
     return output
 
 def relu_mod(state, scope=None, real=False, name=None):
@@ -700,9 +697,9 @@ class uRNNCell(steph_RNNCell):
             intermediate_re = foldin_re + Ustate_re
             intermediate_im = foldin_im + Ustate_im
 
-            intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+#            intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
            
-            new_state = tanh_mod(intermediate_state, scope='tanh_mod', name='new_state')
+            new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
             #new_state = tf.nn.tanh(intermediate_state, name='new_state')
             #new_state = tf.nn.relu(intermediate_state, name='new_state')
             #new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True, name='new_state')
