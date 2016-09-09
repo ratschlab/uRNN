@@ -170,6 +170,31 @@ def reflection(state, state_size, scope=None, theano_reflection=True, real=False
             new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
             return new_state
 
+def tanh_mod(state, scope=None, name=None):
+    """
+    tanh for complex-valued state
+    (just applies it to the modulus of the state, leaves phase intact)
+    ...
+    assumes input is [batch size, 2*d]
+    the second half of the columns are the imaginary parts
+    """
+    state_size = state.get_shape()[1]
+    hidden_size = state_size/2
+    with vs.variable_scope(scope or "tanh_mod"):
+        x_vals = tf.slice(state, [0, 0], [-1, hidden_size])
+        y_vals = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+        # r
+        r = tf.sqrt(x_vals**2 + y_vals**2)
+        r_scaled = tf.nn.tanh(r)
+        # use half angle formula to get... angles
+        atan_arg = tf.div(r - x_vals, y_vals)
+        angle = 2*tf.atan(atan_arg)
+        # now recalculate the xes and ys
+        x_scaled = tf.mul(r_scaled, tf.cos(angle))
+        y_scaled = tf.mul(r_scaled, tf.sin(angle))
+        output = tf.concat(0, [x_scaled, y_scaled], name='new_state')
+    return output
+
 def relu_mod(state, scope=None, real=False, name=None):
     """
     Rectified linear unit for complex-valued state.
@@ -193,7 +218,7 @@ def relu_mod(state, scope=None, real=False, name=None):
                                         #rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0.0)
         else:
             # state is [state_re, state_im]
-            modulus = tf.reduce_sum(state**2)
+            modulus = tf.reduce_sum(state**2, 0)
             hidden_size = state_size/2
             bias_re = vs.get_variable("Bias", dtype=tf.float32, 
                                       initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(hidden_size)), 
@@ -665,10 +690,10 @@ class uRNNCell(steph_RNNCell):
             state_re = tf.slice(state, [0, 0], [-1, hidden_size])
             state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
 
-            Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
-            Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+#            Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
+#            Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
 
-#            Ustate_re, Ustate_im = linear_complex(state_re, state_im, hidden_size, bias=False, scope='Unitary/Transition', init_val_re=self._init_re, init_val_im=self._init_im)
+            Ustate_re, Ustate_im = linear_complex(state_re, state_im, hidden_size, bias=False, scope='Unitary/Transition', init_val_re=self._init_re, init_val_im=self._init_im)
 #                    Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
             foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
             foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
@@ -676,12 +701,10 @@ class uRNNCell(steph_RNNCell):
             intermediate_im = foldin_im + Ustate_im
 
             intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
-            
+           
+            new_state = tanh_mod(intermediate_state, scope='tanh_mod', name='new_state')
             #new_state = tf.nn.tanh(intermediate_state, name='new_state')
             #new_state = tf.nn.relu(intermediate_state, name='new_state')
             #new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True, name='new_state')
-            new_state = tf.identity(intermediate_state, name='new_state')
-            # DANGERZONE
-            #output = new_state
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
