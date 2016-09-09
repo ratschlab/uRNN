@@ -178,14 +178,27 @@ def tanh_mod(x_vals, y_vals, scope=None, name=None):
     assumes input is [batch size, 2*d]
     the second half of the columns are the imaginary parts
     """
+    batch_size = x_vals.get_shape()[0]
     state_size = x_vals.get_shape()[1]
     hidden_size = state_size/2
     with vs.variable_scope(scope or "tanh_mod"):
         r = tf.sqrt(x_vals**2 + y_vals**2)
         r_scaled = tf.nn.tanh(r)
         # use half angle formula to get... angles
+        # if y = 0...
+        y_zeros = tf.equal(y_vals, 0)
+        # if x > 0...
+        x_g0 = tf.greater(x_vals, 0)
+        x_l0 = tf.less(x_vals, 0)
+        set_to_zero = tf.logical_and(y_zeros, x_g0)
+        zero_matrix = tf.zeros_like(x_vals)
+        set_to_pi = tf.logical_and(y_zeros, x_l0)
+        pi_matrix = tf.mul(np.pi, tf.ones_like(x_vals))
+        # get the values
         atan_arg = tf.div(r - x_vals, y_vals)
-        angle = 2*tf.atan(atan_arg)
+        pre_angle = 2*tf.atan(atan_arg)
+        angle_filtered_zero = tf.select(set_to_zero, zero_matrix, pre_angle)
+        angle = tf.select(set_to_pi, pi_matrix, angle_filtered_zero)
         # now recalculate the xes and ys
         x_scaled = tf.mul(r_scaled, tf.cos(angle))
         y_scaled = tf.mul(r_scaled, tf.sin(angle))
@@ -697,7 +710,7 @@ class uRNNCell(steph_RNNCell):
             intermediate_re = foldin_re + Ustate_re
             intermediate_im = foldin_im + Ustate_im
 
-#            intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+            #intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
            
             new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
             #new_state = tf.nn.tanh(intermediate_state, name='new_state')

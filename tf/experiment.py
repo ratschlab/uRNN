@@ -143,7 +143,7 @@ def update_step(cost, learning_rate, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-def get_data(load_path, task, T, ntrain=int(1e7), nvali=int(1e4), ntest=int(1e4)):
+def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)):
     """
     Either load or generate data.
     """
@@ -256,13 +256,14 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     # === ops for training === #
     if verbose: print 'setting up train ops...'
     cost = get_cost(outputs, y, loss_type)
+
     if model in {'ortho_tanhRNN', 'uRNN'}:
         # COMMENCE GRADIENT HACKS
         opt = create_optimiser(learning_rate)
         nonU_variables = []
         if model == 'uRNN':
-            U_re_name = 'RNN/uRNN/Unitary/Transition/Real/Matrix:0'
-            U_im_name = 'RNN/uRNN/Unitary/Transition/Imaginary/Matrix:0'
+            U_re_name = 'RNN/uRNN/Unitary/Transition/Matrix/Real:0'
+            U_im_name = 'RNN/uRNN/Unitary/Transition/Matrix/Imaginary:0'
             for var in tf.trainable_variables():
                 print var.name
                 if var.name == U_re_name:
@@ -332,7 +333,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     internal_grads[o_counter] = tf.gradients(cost, o.values()[0])[0]
                     internal_states[o_counter] = o.values()[0]
                     o_counter += 1
-            assert o_counter == train_data.sequence_length
+            if not o_counter == train_data.sequence_length:
+                print o_counter, train_data.sequence_length
 
         # === train loop === #
         if verbose: print 'preparing to train!'
@@ -489,8 +491,6 @@ T = options['T']
 if options['task'] == 'adding':
     if T == 100:
         options['data_path'] = 'input/adding/1470744790_100.pk'
-#        options['data_path'] = ''
-#        options['data_path'] = 'input/adding/10000000_10000_1472949986_100.pk'
     elif T == 200:
         options['data_path'] = 'input/adding/1470744860_200.pk'
     elif T == 400:
