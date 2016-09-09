@@ -309,7 +309,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 1.0
+    config.gpu_options.per_process_gpu_memory_fraction = 0.5
 
     # === let's do it! === #
     if verbose: print 'initialising session...'
@@ -355,8 +355,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         dcost_dU_re, dcost_dU_im = session.run([g_and_v_U[0][0], g_and_v_U[1][0]], {x:batch_x, y:batch_y})
                         # calculate gradients of lambdas using eigenvalue decomposition trick
                         U_new_re_array, U_new_im_array, dlambdas = eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate, speedy=True)
-
-                        train_cost = session.run(cost, {x:batch_x, y:batch_y})
+                        #train_cost = session.run(cost, {x:batch_x, y:batch_y})
                         _, _, _ = session.run([train_op, assign_re_op, assign_im_op], {x: batch_x, y:batch_y, U_new_re: U_new_re_array, U_new_im: U_new_im_array})
                     else:
                         #model == 'ortho_tanhRNN':
@@ -456,6 +455,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 #                train_writer.add_summary(summary, batch_index)
 
                 if batch_index % 150 == 0:
+                    train_cost = session.run(cost, {x:batch_x, y:batch_y})
                     print epoch, '\t', batch_index, '\t', loss_type + ':', train_cost
                     vali_cost = session.run(cost, {x: vali_data.x, y: vali_data.y})
 

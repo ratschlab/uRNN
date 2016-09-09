@@ -685,8 +685,9 @@ class uRNNCell(steph_RNNCell):
                     intermediate_re = foldin_re + Ustate_re
                     intermediate_im = foldin_im + Ustate_im
                     intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
-                    new_state = tf.nn.tanh(intermediate_state, name='new_state')
-                    #new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+                    #new_state = tf.nn.tanh(intermediate_state, name='new_state')
+                    #new_state = tf.nn.relu(intermediate_state, name='new_state')
+                    new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
                 else:
                     Ustate_re = linear(state_re, hidden_size, bias=False, scope='Unitary/Transition/Real', init_val=self._init_re)
                     Ustate_im = linear(state_im, hidden_size, bias=False, scope='Unitary/Transition/Imaginary', init_val=self._init_im)

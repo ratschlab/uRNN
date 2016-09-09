@@ -542,7 +542,7 @@ def eigtrick_lambda_update(dcost_dU_re, dcost_dU_im, lambdas, learning_rate,
                 lambda_index += 1
 
     # done-ish, recombine
-    lambdas += learning_rate*dlambdas
+    lambdas -= learning_rate*dlambdas
    
     # having updated the lambdas, get new U
     #U_new = expm(lie_algebra_element(n, lambdas))
