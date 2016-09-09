@@ -170,6 +170,41 @@ def reflection(state, state_size, scope=None, theano_reflection=True, real=False
             new_state = state - prefactor *  tf.transpose(tf.matmul(v, tf.transpose(vx)))
             return new_state
 
+def tanh_mod(x_vals, y_vals, scope=None, name=None):
+    """
+    tanh for complex-valued state
+    (just applies it to the modulus of the state, leaves phase intact)
+    ...
+    assumes input is [batch size, 2*d]
+    the second half of the columns are the imaginary parts
+    """
+    batch_size = x_vals.get_shape()[0]
+    state_size = x_vals.get_shape()[1]
+    hidden_size = state_size/2
+    with vs.variable_scope(scope or "tanh_mod"):
+        r = tf.sqrt(x_vals**2 + y_vals**2)
+        r_scaled = tf.nn.tanh(r)
+        # use half angle formula to get... angles
+        # if y = 0...
+        y_zeros = tf.equal(y_vals, 0)
+        # if x > 0...
+        x_g0 = tf.greater(x_vals, 0)
+        x_l0 = tf.less(x_vals, 0)
+        set_to_zero = tf.logical_and(y_zeros, x_g0)
+        zero_matrix = tf.zeros_like(x_vals)
+        set_to_pi = tf.logical_and(y_zeros, x_l0)
+        pi_matrix = tf.mul(np.pi, tf.ones_like(x_vals))
+        # get the values
+        atan_arg = tf.div(r - x_vals, y_vals)
+        pre_angle = 2*tf.atan(atan_arg)
+        angle_filtered_zero = tf.select(set_to_zero, zero_matrix, pre_angle)
+        angle = tf.select(set_to_pi, pi_matrix, angle_filtered_zero)
+        # now recalculate the xes and ys
+        x_scaled = tf.mul(r_scaled, tf.cos(angle))
+        y_scaled = tf.mul(r_scaled, tf.sin(angle))
+        output = tf.concat(1, [x_scaled, y_scaled], name='new_state')
+    return output
+
 def relu_mod(state, scope=None, real=False, name=None):
     """
     Rectified linear unit for complex-valued state.
@@ -193,7 +228,7 @@ def relu_mod(state, scope=None, real=False, name=None):
                                         #rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0.0)
         else:
             # state is [state_re, state_im]
-            modulus = tf.reduce_sum(state**2)
+            modulus = tf.reduce_sum(state**2, 0)
             hidden_size = state_size/2
             bias_re = vs.get_variable("Bias", dtype=tf.float32, 
                                       initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(hidden_size)), 
@@ -325,8 +360,9 @@ def linear(args, output_size, bias, bias_start=0.0,
         bias_term = vs.get_variable("Bias", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
     return res + bias_term
 
-def linear_complex(arg, output_size, bias, bias_start=0.0, 
-           scope=None, identity=-1, dtype=tf.float32):
+def linear_complex(arg_re, arg_im, output_size, bias, bias_start=0.0, 
+           scope=None, identity=-1, dtype=tf.float32,
+           init_val_re=None, init_val_im=None):
     """
     NOTE: arg is a single arg, because that's how it is
 
@@ -347,28 +383,34 @@ def linear_complex(arg, output_size, bias, bias_start=0.0,
         2D tensor with shape [batch x output_size] equal to arg * W
     Raises:
         ValueError: if some of the arguments has unspecified or wrong shape.
-  """
-    assert arg
-    shape = arg.get_shape().as_list()
+    """
+    shape = arg_re.get_shape().as_list()
     if len(shape) != 2:
         raise ValueError("LinearComplex is expecting a 2D argument")
     n = shape[1]
 
-    arg_re = tf.real(arg)
-    arg_im = tf.imag(arg)
-
     # Now the computation.
     with vs.variable_scope(scope or "LinearComplex"):
-        matrix_re = vs.get_variable("Matrix/Real", dtype=dtype, initializer=fixed_initializer([n], output_size, identity, dtype))
-        matrix_im = vs.get_variable("Matrix/Imaginary", dtype=dtype, initializer=fixed_initializer([n], output_size, identity, dtype))
+        if init_val_re is None:
+            matrix_re = vs.get_variable("Matrix/Real", dtype=dtype, initializer=fixed_initializer([n], output_size, identity, dtype))
+        else:
+            matrix_re = vs.get_variable("Matrix/Real", dtype=dtype, initializer=tf.constant(init_val_re, dtype=dtype))
+        if init_val_im is None:
+            matrix_im = vs.get_variable("Matrix/Imaginary", dtype=dtype, initializer=fixed_initializer([n], output_size, identity, dtype))
+        else:
+            matrix_im = vs.get_variable("Matrix/Imaginary", dtype=dtype, initializer=tf.constant(init_val_im, dtype=dtype))
+
+        # HERE IT IS!
         res_re = tf.matmul(arg_re, matrix_re) - tf.matmul(arg_im, matrix_im)
         res_im = tf.matmul(arg_im, matrix_re) + tf.matmul(arg_re, matrix_im)
+        # there's the end fo that bit
+
         if not bias:
-            return tf.complex(res_re, res_im)
+            return res_re, res_im
         else:
             bias_re = vs.get_variable("Bias/Real", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
             bias_im = vs.get_variable("Bias/Imaginary", dtype=dtype, initializer=tf.constant(bias_start, dtype=dtype, shape=[output_size]))
-            return tf.complex(res_re + bias_re, res_im + bias_im)
+            return res_re + bias_re, res_im + bias_im
 
 # === RNNs ! === #
 
@@ -384,7 +426,6 @@ def RNN(cell_type, x, input_size, state_size, output_size, sequence_length, init
         cell = LSTMCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
         state_0 = cell.zero_state(batch_size)
     elif cell_type == 'complex_RNN':
-        #cell = complex_RNNCell(input_size=input_size, state_size=state_size, output_size=output_size, state_dtype=tf.complex64)
         cell = complex_RNNCell(input_size=input_size, state_size=2*state_size, output_size=output_size, state_dtype=x.dtype)
         state_0 = cell.h0(batch_size)
     elif cell_type == 'uRNN':
@@ -473,7 +514,7 @@ class steph_RNNCell(tf.nn.rnn_cell.RNNCell):            # tf 0.9.0
         """
         if dtype is None:
             dtype = self.state_dtype
-        bucket = np.sqrt(3/self._state_size)
+        bucket = np.sqrt(3.0/self._state_size)
         first_state = tf.random_uniform([batch_size, self._state_size], minval=-bucket, maxval=bucket, dtype=dtype)
         return first_state
 
@@ -648,73 +689,32 @@ class complex_RNNCell(steph_RNNCell):
         return output, new_state
 
 class uRNNCell(steph_RNNCell):
-    def __call__(self, inputs, state, scope='uRNN', split=True, real_valued=False):
+    def __call__(self, inputs, state, scope='uRNN', split=True):
         """
         this unitary RNN shall be my one, once I figure it out I guess
         ... fun times ahead
-
-        split produces some different behaviour... if split, real/imag parameters are separate
         """
-        # TODO: think about outputs
         with vs.variable_scope(scope):
-            if real_valued:
-                # this means all the variables etc. are real-valued, we don't need to deal with complex numbers at all
-                # (because I am paranoid that TF isn't doing complex gradients as I expect)
+            # transform the hidden state
+            hidden_size = self._state_size/2
+            state_re = tf.slice(state, [0, 0], [-1, hidden_size])
+            state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
 
-                # so, the state will be [real; imaginary]
-                raise NotImplementedError
-            if split:
-                # transform the hidden state
-                # these are possibly non-differentiable in tf, need to test :/
-#                state_re = tf.real(state)
-#                state_im = tf.imag(state)
-                
-                hidden_size = self._state_size/2
-                state_re = tf.slice(state, [0, 0], [-1, hidden_size])
-                state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+#            Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
+#            Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
 
-#                Ustate_re = linear(state_re, self._state_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
-#                Ustate_im = linear(state_im, self._state_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+            Ustate_re, Ustate_im = linear_complex(state_re, state_im, hidden_size, bias=False, scope='Unitary/Transition', init_val_re=self._init_re, init_val_im=self._init_im)
+#                    Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
+            foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
+            foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
+            intermediate_re = foldin_re + Ustate_re
+            intermediate_im = foldin_im + Ustate_im
 
-                LTRNN = False
-                if not LTRNN:
-                    Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
-                    Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
-                    foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
-                    foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
-                    intermediate_re = foldin_re + Ustate_re
-                    intermediate_im = foldin_im + Ustate_im
-                    intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
-                    #new_state = tf.nn.tanh(intermediate_state, name='new_state')
-                    #new_state = tf.nn.relu(intermediate_state, name='new_state')
-                    new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
-                else:
-                    Ustate_re = linear(state_re, hidden_size, bias=False, scope='Unitary/Transition/Real', init_val=self._init_re)
-                    Ustate_im = linear(state_im, hidden_size, bias=False, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
-                    foldin_re = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Real')
-                    foldin_im = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Imaginary')
-                    intermediate_re = tf.nn.tanh(foldin_re) + Ustate_re
-                    intermediate_im = tf.nn.tanh(foldin_im) + Ustate_im
-                    new_state = tf.concat(1, [intermediate_re, intermediate_im], name='new_state')
-
-
-    # messing with relus right now
-#                new_state_re = tf.nn.relu(intermediate_re)
-#                new_state_im = tf.nn.relu(intermediate_im)
-
-#                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
-                #pdb.set_trace()
-
-                # DANGERZONE
-#                output = new_state
-                output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
-#                output = linear(tf.real(new_state), self._output_size, bias=True, scope='Linear/Output')
-            else:
-                raise NotImplementedError
-                inputs_complex = tf.complex(inputs, 0.0)
-                # probably using sigmoid?
-                new_state = tf.nn.sigmoid(linear_complex(inputs_complex, self._state_size, bias=True, scope='Linear/FoldIn') + linear_complex(state, self._state_size, bias=False, scope='Unitary/Transition'), name='Unitary/State')
-                output = linear_complex(new_state, self._output_size, bias=True, scope='Linear/Output')
-                # for now, output is modulus...
-                output = tf.sqrt(tf.real(output)**2 + tf.imag(output)**2)
+            #intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+           
+            new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
+            #new_state = tf.nn.tanh(intermediate_state, name='new_state')
+            #new_state = tf.nn.relu(intermediate_state, name='new_state')
+            #new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True, name='new_state')
+            output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state

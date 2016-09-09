@@ -30,7 +30,6 @@ import cProfile
 # === some bools === #
 
 DO_TEST = False
-COMPARE_NUMERICAL_GRADIENT = False
 #SAVE_INTERNAL_GRADS = True
 SAVE_INTERNAL_GRADS = False
 
@@ -144,7 +143,7 @@ def update_step(cost, learning_rate, clipping=False):
     train_opt = opt.apply_gradients(g_and_v, name='RMSProp_update')
     return train_opt
 
-def get_data(load_path, task, T, ntrain=int(1e7), nvali=int(1e4), ntest=int(1e4)):
+def get_data(load_path, task, T, ntrain=int(1e5), nvali=int(1e4), ntest=int(1e4)):
     """
     Either load or generate data.
     """
@@ -257,13 +256,14 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     # === ops for training === #
     if verbose: print 'setting up train ops...'
     cost = get_cost(outputs, y, loss_type)
+
     if model in {'ortho_tanhRNN', 'uRNN'}:
         # COMMENCE GRADIENT HACKS
         opt = create_optimiser(learning_rate)
         nonU_variables = []
         if model == 'uRNN':
-            U_re_name = 'RNN/uRNN/Unitary/Transition/Real/Matrix:0'
-            U_im_name = 'RNN/uRNN/Unitary/Transition/Imaginary/Matrix:0'
+            U_re_name = 'RNN/uRNN/Unitary/Transition/Matrix/Real:0'
+            U_im_name = 'RNN/uRNN/Unitary/Transition/Matrix/Imaginary:0'
             for var in tf.trainable_variables():
                 print var.name
                 if var.name == U_re_name:
@@ -333,7 +333,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     internal_grads[o_counter] = tf.gradients(cost, o.values()[0])[0]
                     internal_states[o_counter] = o.values()[0]
                     o_counter += 1
-            assert o_counter == train_data.sequence_length
+            if not o_counter == train_data.sequence_length:
+                print o_counter, train_data.sequence_length
 
         # === train loop === #
         if verbose: print 'preparing to train!'
@@ -374,83 +375,6 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # no eigtrick required, no numerical gradients, all is fine
                     train_cost, _ = session.run([cost, train_op], {x: batch_x, y: batch_y})
                 
-                 # TODO ... this section can be retired soon-ish
-                if COMPARE_NUMERICAL_GRADIENT:
-                    print 'comparing numerical and tensorflow gradients...'
-                    EPSILON=1e-4
-                    basic_cost = session.run(cost, {x: batch_x, y:batch_y})
-                    # check the normal TF gradients regardless
-                    #Gradvar_name = 'RNN/complex_RNN/Reflection/Second/Reflection/Real:0'
-                    Gradvar_name = ''
-                    for v in tf.trainable_variables():
-                        if v.name == Gradvar_name:
-                            Gradvar = v
-                            break
-                    else:
-                        # uh oh
-                        pick = np.random.choice(len(tf.trainable_variables()))
-                        Gradvar = tf.trainable_variables()[pick]
-                        print 'WARNING: Gradvar with name', Gradvar_name, 'not found in trainable variables, selecting', Gradvar.name, 'instead.'
-                    # interested in this specific array, "Gradvar"
-                    dcost_dGradvar_tf = session.run(tf.gradients(cost, Gradvar), {x:batch_x, y:batch_y})[0]
-                    Gradvar_array = session.run(Gradvar, {x:batch_x, y:batch_y})
-                    dcost_dGradvar_num = np.zeros_like(dcost_dGradvar_tf)
-                    perturbed_Gradvar = deepcopy(Gradvar_array)
-                    if len(dcost_dGradvar_tf.shape) == 2:
-                        # go over the shape of Gradvar
-                        imax, jmax = dcost_dGradvar_tf.shape
-                        for i in xrange(imax):
-                            for j in xrange(jmax):
-                                perturbed_Gradvar[i, j] += EPSILON
-                                # recalculate the cost
-                                perturbed_cost = session.run(cost, {x:batch_x, y:batch_y, Gradvar: perturbed_Gradvar})
-                                gradient = (perturbed_cost - basic_cost)/EPSILON
-                                dcost_dGradvar_num[i, j] = gradient
-                                # deperturb
-                                perturbed_Gradvar[i, j] -= EPSILON
-                    else:
-                        # assume 1D
-                        imax = len(dcost_dGradvar_tf)
-                        for i in xrange(imax):
-                            perturbed_Gradvar[i] += EPSILON
-                            perturbed_cost = session.run(cost, {x:batch_x, y:batch_y, Gradvar: perturbed_Gradvar})
-                            gradient = (perturbed_cost - basic_cost)/EPSILON
-                            dcost_dGradvar_num[i] = gradient
-                            # deperturb
-                            perturbed_Gradvar[i] -= EPSILON
-                    # now compare
-                    print np.mean(np.abs(dcost_dGradvar_tf - dcost_dGradvar_num))
-                    pdb.set_trace()
-                    # NOW check the eigtrick lambda updates part (if relevant)
-                    if model == 'uRNN' or 'orthogonal' in model:
-                        L = lie_algebra_element(state_size, lambdas)
-                        numerical_dcost_dlambdas = np.zeros_like(lambdas)
-                        if model == 'uRNN':
-                            T_indices = xrange(len(lambdas))
-                        else:
-                            T_indices = []
-                            for i in xrange(0, state_size):
-                                for j in xrange(0, i):
-                                    T_indices.append(state_size*i + j)
-                        lambda_index = 0
-                        for e in T_indices:
-                            print 100.0*e/len(lambdas)
-                            perturbed_L = L + EPSILON*lie_algebra_basis_element(state_size, e, complex_out=True)
-                            perturbed_U = expm(perturbed_L).T
-                            if model == 'uRNN':
-                                perturbed_U_re = np.real(perturbed_U)
-                                perturbed_U_im = np.imag(perturbed_U)
-                                perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_re_variable: perturbed_U_re, U_im_variable: perturbed_U_im})
-                            else:
-                                perturbed_cost = session.run(cost, {x: batch_x, y: batch_y, U_variable: perturbed_U})
-                            gradient = (perturbed_cost - basic_cost)/EPSILON
-                            print gradient, dlambdas[lambda_index]
-                            numerical_dcost_dlambdas[lambda_index] = gradient
-                            lambda_index += 1
-                        # now compare with dlambdas
-                        print np.mean(np.abs(dlambdas - numerical_dcost_dlambdas))
-
-          
                 # TODO OFF FOR NOW
 #                train_writer.add_summary(summary, batch_index)
 
@@ -567,8 +491,6 @@ T = options['T']
 if options['task'] == 'adding':
     if T == 100:
         options['data_path'] = 'input/adding/1470744790_100.pk'
-#        options['data_path'] = ''
-#        options['data_path'] = 'input/adding/10000000_10000_1472949986_100.pk'
     elif T == 200:
         options['data_path'] = 'input/adding/1470744860_200.pk'
     elif T == 400:
