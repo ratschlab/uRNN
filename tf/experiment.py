@@ -416,7 +416,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # timing
                     if TIMING:
                         if batch_index == 0:
-                            dt = 0
+                            dt = 0.0
                             t_prev = time()
                         t = time()
                         dt = t - t_prev
