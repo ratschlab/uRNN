@@ -32,6 +32,7 @@ import cProfile
 DO_TEST = False
 #SAVE_INTERNAL_GRADS = True
 SAVE_INTERNAL_GRADS = False
+TIMING = False              # record time between batches
 
 # === fns === #
 
@@ -253,6 +254,11 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
         hidden_states_file = open(hidden_states_path, 'w')
         hidden_states_file.write('batch k value what\n')
 
+    if TIMING:
+        timing_path = 'output/' + task + '/' + mname + '.timing.txt'
+        timing_file = open(timing_path, 'w')
+        timing_file.write('epoch batch time\n')
+
     # === ops for training === #
     if verbose: print 'setting up train ops...'
     cost = get_cost(outputs, y, loss_type)
@@ -396,8 +402,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     else:
                         print epoch, '\t', batch_index, '\t    VALI', loss_type + ':', vali_cost
 
+                    # get mnist accuracy
                     if 'mnist' in task:
-                        # get preds
                         last_outs = session.run(outputs[-1], {x: vali_data.x, y:vali_data.y})
                         class_predictions = np.argmax(np.exp(last_outs)/np.sum(np.exp(last_outs), axis=1).reshape(6000, -1), axis=1)
                         vali_acc = 100 * np.mean(class_predictions == vali_data.y)
@@ -405,19 +411,17 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         vali_acc_trace_file.flush()
                         print epoch, '\t', batch_index, '\t    VALI ACC:', vali_acc
 
-#                if batch_index % 500 == 0:
-#                    if verbose: print 'saving traces to', trace_path
-#                    save_vals = {'train_loss': train_cost_trace,
-#                                 'vali_loss': vali_cost_trace,
-#                                 'vali_acc': vali_acc_trace,
-#                                 'best_vali_loss': best_vali_cost,
-#                                 'model': model,
-#                                 'time_steps': T,
-#                                 'batch_size': batch_size}
 
-#                    cPickle.dump(save_vals, file(trace_path, 'wb'),
-#                                 cPickle.HIGHEST_PROTOCOL)
-#                    if verbose: print 'finished saving!'
+                    # timing
+                    if TIMING:
+                        if batch_index == 0:
+                            dt = 0
+                            t_prev = time.time()
+                        t = time.time()
+                        dt = t - t_prev
+                        timing_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(dt) +'\n')
+                        timing_file.flush()
+                        t_prev = t
 
                 if batch_index % 500 == 0 and model == 'uRNN':
                     lambda_file.write(str(batch_index) + ' ' + ' '.join(map(str, lambdas)) + '\n')
