@@ -191,7 +191,7 @@ def tanh_mod(x_vals, y_vals, scope=None, name=None):
         x_g0 = tf.greater(x_vals, 0)
         x_l0 = tf.less(x_vals, 0)
         set_to_zero = tf.logical_and(y_zeros, x_g0)
-        zero_matrix = tf.zeros_like(x_vals)
+        zero_matrix = tf.zeros_like(x_vals) + 1e-6
         set_to_pi = tf.logical_and(y_zeros, x_l0)
         pi_matrix = tf.mul(np.pi, tf.ones_like(x_vals))
         # get the values
@@ -205,12 +205,11 @@ def tanh_mod(x_vals, y_vals, scope=None, name=None):
         output = tf.concat(1, [x_scaled, y_scaled], name='new_state')
     return output
 
-def relu_mod(state, scope=None, real=False, name=None):
+def relu_mod(state, state_size, scope=None, real=False, name=None):
     """
     Rectified linear unit for complex-valued state.
     (Equation 8 in http://arxiv.org/abs/1511.06464)
     """
-    state_size = state.get_shape()[1]
     batch_size = state.get_shape()[0]
     with vs.variable_scope(scope or "ReLU_mod"):
         if not real:
@@ -228,15 +227,19 @@ def relu_mod(state, scope=None, real=False, name=None):
                                         #rescale = tf.complex(tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5), 0.0)
         else:
             # state is [state_re, state_im]
-            modulus = tf.reduce_sum(state**2, 0)
             hidden_size = state_size/2
+            state_re = tf.slice(state, [0, 0], [-1, hidden_size])
+            state_im = tf.slice(state, [0, hidden_size], [-1, hidden_size])
+            modulus = tf.sqrt(state_re**2 + state_im**2)
+            # this is [batch_size, hidden_size] in shape, now...
             bias_re = vs.get_variable("Bias", dtype=tf.float32, 
                                       initializer=tf.constant(np.random.uniform(low=-0.01, high=0.01, size=(hidden_size)), 
                                                               dtype=tf.float32, 
                                                               shape=[hidden_size]))
-            bias_term = tf.concat(0, [bias_re, tf.zeros_like(bias_re)])
-            rescale = tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5*tf.ones_like(modulus) )
-        output = tf.mul(state, rescale, name=name)
+            rescale = tf.maximum(modulus + bias_re, 0) / (modulus + 1e-5 * tf.ones_like(modulus))
+#            bias_term = tf.concat(0, [bias_re, tf.zeros_like(bias_re)])
+#            rescale = tf.maximum(modulus + bias_term, 0) / ( modulus + 1e-5*tf.ones_like(modulus) )
+        output = tf.mul(state, tf.tile(rescale, [1, 2]), name=name)
     return output
 
 def fixed_initializer(n_in_list, n_out, identity=-1, dtype=tf.float32):
@@ -649,9 +652,9 @@ class complex_RNNCell(steph_RNNCell):
 #                intermediate_re = foldin_re + tf.real(step8)
 #                intermediate_im = foldin_im + tf.imag(step8)
 #                intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
-#                new_state_real = relu_mod(intermediate_state, scope='ReLU_mod', real=True)
+#                new_state_real = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True)
                 
-                new_state = relu_mod(intermediate_state, scope='ReLU_mod', name='new_state')
+                new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', name='new_state')
 #                new_state = intermediate_state
 
                 
@@ -682,7 +685,7 @@ class complex_RNNCell(steph_RNNCell):
                 
                 intermediate_state = step8 + foldin
 
-                new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True, name='new_state')
+                new_state = relu_mod(intermediate_state, self._state_size,scope='ReLU_mod', real=True, name='new_state')
                 
                 output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
 
@@ -710,11 +713,12 @@ class uRNNCell(steph_RNNCell):
             intermediate_re = foldin_re + Ustate_re
             intermediate_im = foldin_im + Ustate_im
 
-            #intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
+            intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
            
-            new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
+            #new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
             #new_state = tf.nn.tanh(intermediate_state, name='new_state')
             #new_state = tf.nn.relu(intermediate_state, name='new_state')
-            #new_state = relu_mod(intermediate_state, scope='ReLU_mod', real=True, name='new_state')
+            new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True, name='new_state')
+
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
