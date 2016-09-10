@@ -32,7 +32,8 @@ import cProfile
 DO_TEST = False
 #SAVE_INTERNAL_GRADS = True
 SAVE_INTERNAL_GRADS = False
-TIMING = False              # record time between batches
+#TIMING = False              # record time between batches
+TIMING = True               # record time between batches
 
 # === fns === #
 
@@ -416,8 +417,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     if TIMING:
                         if batch_index == 0:
                             dt = 0
-                            t_prev = time.time()
-                        t = time.time()
+                            t_prev = time()
+                        t = time()
                         dt = t - t_prev
                         timing_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(dt) +'\n')
                         timing_file.flush()
