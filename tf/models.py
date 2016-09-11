@@ -717,8 +717,8 @@ class uRNNCell(steph_RNNCell):
            
             #new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
             #new_state = tf.nn.tanh(intermediate_state, name='new_state')
-            #new_state = tf.nn.relu(intermediate_state, name='new_state')
-            new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True, name='new_state')
+            new_state = tf.nn.relu(intermediate_state, name='new_state')
+            #new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True, name='new_state')
 
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
         return output, new_state
