@@ -13,6 +13,7 @@ print(fname_base)
 # --- print summary statistics about test --- #
 #fname<-paste0(fname_base, 'comb.txt')
 fname<-paste0(fname_base, 'test.txt')
+
 dtest<-read.table(fname, header=T)
 
 my_mean<-function(data, indices){
