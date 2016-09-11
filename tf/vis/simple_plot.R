@@ -13,14 +13,14 @@ d<-args[1]
 #identifier<-args[2]
 noise<-0.01
 
-#fname_base<-paste0('output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
-#fname_base<-paste0('output/simple/hazan_3_d', d, '_noise', noise, '_bn20_nb50000_')
-fname_base<-paste0('output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
-#fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb5000_')
-#fname_base<-paste0('output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
-#fname_base<-paste0('output/simple/lr_d', d, '_noise', noise, '_bn20_nb50000_')
-#fname_base<-paste0('output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
-#fname_base<-paste0('output/simple/nips/random_projections_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/hazan_3_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('../output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/d', d, '_noise', noise, '_bn20_nb5000_')
+#fname_base<-paste0('../output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/lr_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/nips/d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/nips/random_projections_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
 
 # --- vali --- #

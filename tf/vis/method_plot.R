@@ -4,7 +4,7 @@ library(scales)
 
 #for (n_pick in c(3, 6, 8, 14, 20, 100)){
 for (n_pick in c(100)){
-    dbox<-read.table('output/simple/l2/derived/boxplot_compile.txt', header=T)
+    dbox<-read.table('../output/simple/l2/derived/boxplot_compile.txt', header=T)
 
     if (n_pick == 100){
         # doing some weird subsetting
@@ -44,6 +44,6 @@ for (n_pick in c(100)){
     p <- p + stat_summary(fun.data = "mean_cl_boot", geom="bar", aes(colour=method, fill=method), position=dodge, alpha=0.2)
     p <- p + stat_summary(fun.data = "mean_cl_boot", geom="errorbar", aes(colour=method, fill=method), position=dodge, alpha=0.7, width=0.5)
 
-    ggsave(paste0('output/simple/l2/derived/boxplot', n_pick, '.png'), width=4.5, height=3)
-    ggsave(paste0('output/simple/l2/derived/boxplot', n_pick, '.pdf'), width=4.5, height=3)
+    ggsave(paste0('../output/simple/l2/derived/boxplot', n_pick, '.png'), width=4.5, height=3)
+    ggsave(paste0('../output/simple/l2/derived/boxplot', n_pick, '.pdf'), width=4.5, height=3)
 }

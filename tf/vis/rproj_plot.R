@@ -8,7 +8,7 @@ gg_color_hue <- function(n) {
 d<-12
 noise<-0.01
 
-fname_base<-paste0('output/simple/random_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('../output/simple/random_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
 
 # --- get data --- #
