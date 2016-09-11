@@ -11,6 +11,7 @@ from models import *
 from optimizations import *    
 import argparse, timeit
 
+from time import time
 
 def generate_data(time_steps, n_data, n_sequence):
     seq = np.random.randint(1, high=9, size=(n_data, n_sequence))
@@ -140,6 +141,8 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
     train_trace_file.write('epoch batch train_cost\n')
     vali_trace_file = open(savefile + '.vali.txt', 'w')
     vali_trace_file.write('epoch batch vali_cost\n')
+    timing_file = open(savefile + '.timing.txt', 'w')
+    timing_file.write('epoch batch time\n')
 
     # --- Training Loop ---------------------------------------------------------------
 
@@ -191,6 +194,15 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile, model, 
             vali_trace_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(vali_cost) + '\n')
             train_trace_file.flush()
             vali_trace_file.flush()
+            # timing stuff
+            if batch_index == 0:
+                dt = 0.0
+                t_prev = time()
+            t = time()
+            dt = t - t_prev
+            timing_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(dt) + '\n')
+            timing_file.flush()
+            t_prev = t
 
             # i will retire this eventually #
             save_vals = {'parameters': [p.get_value() for p in parameters],
@@ -215,9 +227,9 @@ if __name__=="__main__":
     parser.add_argument("--n_iter", type=int, default=20000)
     parser.add_argument("--n_batch", type=int, default=20)
     parser.add_argument("--n_hidden", type=int, default=128)
-    parser.add_argument("--time_steps", type=int, default=500)
+    parser.add_argument("--time_steps", type=int, default=100)
     parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--savefile", default='memory500_tf')
+    parser.add_argument("--savefile", default='memory100_tf_v2')
     parser.add_argument("--model", default='complex_RNN')
     parser.add_argument("--input_type", default='categorical')
     parser.add_argument("--out_every_t", default='True')
