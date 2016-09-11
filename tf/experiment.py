@@ -33,7 +33,7 @@ DO_TEST = False
 #SAVE_INTERNAL_GRADS = True
 SAVE_INTERNAL_GRADS = False
 #TIMING = False              # record time between batches
-TIMING = True               # record time between batches
+TIMING = True                # record time between batches
 
 # === fns === #
 
