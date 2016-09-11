@@ -309,7 +309,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.9
+    config.gpu_options.per_process_gpu_memory_fraction = 1.0
 
     # === let's do it! === #
     if verbose: print 'initialising session...'

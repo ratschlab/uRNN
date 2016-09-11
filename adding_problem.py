@@ -241,13 +241,14 @@ def main(n_iter, n_batch, n_hidden, time_steps, learning_rate, savefile,
 if __name__=="__main__":
     parser = argparse.ArgumentParser(
         description="training a model")
-    parser.add_argument("--n_iter", type=int, default=20000)
+    parser.add_argument("--n_iter", type=int, default=40000)
+    #parser.add_argument("--n_iter", type=int, default=20000)
     parser.add_argument("--n_batch", type=int, default=20)
     parser.add_argument("--n_hidden", type=int, default=512)
     #parser.add_argument("--n_hidden", type=int, default=80)
     parser.add_argument("--time_steps", type=int, default=750)
     parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--savefile", default='addingT750_tf')
+    parser.add_argument("--savefile", default='addingT750_tf_v2')
     parser.add_argument("--model", default='complex_RNN')
     parser.add_argument("--input_type", default='real')
     parser.add_argument("--out_every_t", default='False')
