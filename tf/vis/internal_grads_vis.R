@@ -1,38 +1,53 @@
 #!/usr/bin/env R
 
 library(ggplot2)
-
-#args<-commandArgs(TRUE)
-#args<-"gradnorms_test_tanhRNN_T100_n3.hidden_gradients.txt"
-#$args<-"gradnorms_test_LSTM_T100_n3.hidden_gradients.txt"
-
 base_dir <- "/home/hyland/git/complex_RNN/tf/output/adding/"
 
 da<-data.frame()
 
 # --- IRNN --- #
-#IRNN_grads<-read.table(paste0(base_dir, "gradnorms_test_IRNN_T100_n3.hidden_gradients.txt"), header=TRUE)
-#which<-rep("IRNN", nrow(IRNN_grads))
-#da<-rbind(data.frame(IRNN_grads, which))
+IRNN_grads<-read.table(paste0(base_dir, "gradtest_IRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("IRNN (relu)", nrow(IRNN_grads))
+da<-rbind(data.frame(IRNN_grads, which))
+
+IRNN_grads<-read.table(paste0(base_dir, "gradtest-tanh_IRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("IRNN (tanh)", nrow(IRNN_grads))
+da<-rbind(data.frame(IRNN_grads, which))
 
 # --- LSTM --- #
-LSTM_grads<-read.table(paste0(base_dir, "gradnorms_test_LSTM_T100_n3.hidden_gradients.txt"), header=TRUE)
+LSTM_grads<-read.table(paste0(base_dir, "gradtest_LSTM_T100_n30.hidden_gradients.txt"), header=TRUE)
 which<-rep("LSTM", nrow(LSTM_grads))
 da<-rbind(da, data.frame(LSTM_grads, which))
 
 # --- tanhRNN --- #
-tanhRNN_grads<-read.table(paste0(base_dir, "gradnorms_test_tanhRNN_T100_n3.hidden_gradients.txt"), header=TRUE)
+tanhRNN_grads<-read.table(paste0(base_dir, "gradtest_tanhRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
 which<-rep("tanhRNN", nrow(tanhRNN_grads))
 da<-rbind(da, data.frame(tanhRNN_grads, which))
 
 # --- complex_RNN --- #
-complex_RNN_grads<-read.table(paste0(base_dir, "gradnorms_test_complex_RNN_T100_n3.hidden_gradients.txt"), header=TRUE)
+complex_RNN_grads<-read.table(paste0(base_dir, "gradtest_complex_RNN_T100_n512.hidden_gradients.txt"), header=TRUE)
 which<-rep("complex_RNN", nrow(complex_RNN_grads))
 da<-rbind(da, data.frame(complex_RNN_grads, which))
 
 # --- uRNN --- #
-uRNN_grads<-read.table(paste0(base_dir, "gradnorms_test_uRNN_T100_n3.hidden_gradients.txt"), header=TRUE)
-which<-rep("uRNN", nrow(uRNN_grads))
+uRNN_grads<-read.table(paste0(base_dir, "relu-gradtest_uRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("uRNN (relu)", nrow(uRNN_grads))
+da<-rbind(da, data.frame(uRNN_grads, which))
+
+uRNN_grads<-read.table(paste0(base_dir, "relumod-gradtest_uRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("uRNN (relumod)", nrow(uRNN_grads))
+da<-rbind(da, data.frame(uRNN_grads, which))
+
+uRNN_grads<-read.table(paste0(base_dir, "tanh-gradtest_uRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("uRNN (tanh)", nrow(uRNN_grads))
+da<-rbind(da, data.frame(uRNN_grads, which))
+
+uRNN_grads<-read.table(paste0(base_dir, "tanhmod-gradtest_uRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("uRNN (tanhmod)", nrow(uRNN_grads))
+da<-rbind(da, data.frame(uRNN_grads, which))
+
+uRNN_grads<-read.table(paste0(base_dir, "leakyrelu-gradtest_uRNN_T100_n30.hidden_gradients.txt"), header=TRUE)
+which<-rep("uRNN (leakyrelu)", nrow(uRNN_grads))
 da<-rbind(da, data.frame(uRNN_grads, which))
 
 # --- now for plot --- #
