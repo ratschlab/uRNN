@@ -30,8 +30,8 @@ import cProfile
 # === some bools === #
 
 DO_TEST = False
-#SAVE_INTERNAL_GRADS = True
-SAVE_INTERNAL_GRADS = False
+SAVE_INTERNAL_GRADS = True
+#SAVE_INTERNAL_GRADS = False
 #TIMING = False              # record time between batches
 TIMING = True                # record time between batches
 
@@ -211,9 +211,9 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     if verbose: print 'setting up RNN...'
     if model == 'uRNN':
         # generate initial lambdas
-        #lambdas = np.random.normal(size=(state_size*state_size))
+        lambdas = np.random.normal(size=(state_size*state_size))
         # initialise with zeroes
-        lambdas = np.random.uniform(low=-1e-5, high=1e-5, size=(state_size*state_size))
+        #lambdas = np.random.uniform(low=-1e-5, high=1e-5, size=(state_size*state_size))
         # transpose because that's how it goes in the RNN
         Uinit = expm(lie_algebra_element(state_size, lambdas)).T
         Uinit_re = np.real(Uinit)
@@ -318,7 +318,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 1.0
+    config.gpu_options.per_process_gpu_memory_fraction = 0.95
 
     # === let's do it! === #
     if verbose: print 'initialising session...'

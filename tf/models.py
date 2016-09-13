@@ -202,7 +202,7 @@ def tanh_mod(x_vals, y_vals, scope=None, name=None):
         # now recalculate the xes and ys
         x_scaled = tf.mul(r_scaled, tf.cos(angle))
         y_scaled = tf.mul(r_scaled, tf.sin(angle))
-        output = tf.concat(1, [x_scaled, y_scaled], name='new_state')
+        output = tf.concat(1, [x_scaled, y_scaled], name=name)
     return output
 
 def relu_mod(state, state_size, scope=None, real=False, name=None):
@@ -708,16 +708,19 @@ class uRNNCell(steph_RNNCell):
 
             Ustate_re, Ustate_im = linear_complex(state_re, state_im, hidden_size, bias=False, scope='Unitary/Transition', init_val_re=self._init_re, init_val_im=self._init_im)
 #                    Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
-            foldin_re = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Real')
-            foldin_im = linear(inputs, hidden_size, bias=False, scope='Linear/FoldIn/Imaginary')
+            foldin_re = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Real')
+            foldin_im = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Imaginary')
             intermediate_re = foldin_re + Ustate_re
             intermediate_im = foldin_im + Ustate_im
 
             intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
-           
+          
+            # identity
+            #new_state = tf.identity(intermediate_state, name='new_state')
             #new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
-            #new_state = tf.nn.tanh(intermediate_state, name='new_state')
-            new_state = tf.nn.relu(intermediate_state, name='new_state')
+            new_state = tf.nn.tanh(intermediate_state, name='new_state')
+            #new_state = tf.nn.relu(intermediate_state, name='new_state')
+            #new_state = tf.maximum(0.1*intermediate_state, intermediate_state, name='new_state')       # ... leaky relu
             #new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True, name='new_state')
 
             output = linear(new_state, self._output_size, bias=True, scope='Linear/Output')
