@@ -239,7 +239,8 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
     exp_name = experiment.name
 
     for (i, batch) in enumerate(train_batches):
-        if 'general_unitary' in exp_name and not NUMGRAD:
+        if 'general_unitary' in exp_name and not 'basis' in exp_name:
+            # always do numgrad unless basis
             loss, d_params = analytical_gradient(loss_function, parameters, batch,
                                                 update_indices=experiment.learnable_parameters)
         elif 'hazan' in exp_name:

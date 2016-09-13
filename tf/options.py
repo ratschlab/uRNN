@@ -370,8 +370,9 @@ def rerun(d):
     proj = Experiment('projection', d, project=True)
     complex_RNN = Experiment('complex_RNN', d)
     general = Experiment('general_unitary', d)
-    general_basis_5 = Experiment('general_unitary_basis5', d, change_of_basis=5)
-    exp_list = [proj, complex_RNN, general, general_basis_5]
+#    general_basis_5 = Experiment('general_unitary_basis5', d, change_of_basis=5)
+    #exp_list = [proj, complex_RNN, general, general_basis_5]
+    exp_list = [proj, complex_RNN, general]
     if d > 7:
         general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=True)
         exp_list.append(general_restricted)

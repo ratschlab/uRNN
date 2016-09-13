@@ -30,8 +30,8 @@ import cProfile
 # === some bools === #
 
 DO_TEST = False
-#SAVE_INTERNAL_GRADS = True
-SAVE_INTERNAL_GRADS = False
+SAVE_INTERNAL_GRADS = True
+#SAVE_INTERNAL_GRADS = False
 #TIMING = False              # record time between batches
 TIMING = True                # record time between batches
 
@@ -212,6 +212,8 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     if model == 'uRNN':
         # generate initial lambdas
         lambdas = np.random.normal(size=(state_size*state_size))
+        # initialise with zeroes
+        #lambdas = np.random.uniform(low=-1e-5, high=1e-5, size=(state_size*state_size))
         # transpose because that's how it goes in the RNN
         Uinit = expm(lie_algebra_element(state_size, lambdas)).T
         Uinit_re = np.real(Uinit)
@@ -429,7 +431,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
                 # calculate gradients of cost with respect to internal states
                 # save the mean (over the batch) norms of these
-                if SAVE_INTERNAL_GRADS and (batch_index == 0 or batch_index == 100):
+                if SAVE_INTERNAL_GRADS and (batch_index in {0, 100, 500}):
                     print 'calculating internal gradients...'
                     internal_grads_np = session.run(internal_grads, {x:batch_x, y:batch_y})
                     print 'calculating internal states...'
@@ -449,7 +451,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         hidden_states_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(mean_norm) + ' norm\n')
                     hidden_gradients_file.flush()
                     hidden_states_file.flush()
-                    if batch_index == 100:
+                    if batch_index == 500:
                         sys.exit('finished recording hidden state info')
 
         print 'Training completed.'
@@ -521,22 +523,6 @@ elif options['task'] == 'mnist_perm':
     options['data_path'] = 'input/mnist_perm/mnist_perm.pk'
 else:
     raise ValueError(options['task'])
-
-# === suggestions (param values from paper) === #
-print 'Suggested state sizes:'
-if options['task'] == 'adding' or options['task'] == 'mnist':
-    print 'tanhRNN:\t80'
-    print 'IRNN:\t\t80'
-    print 'LSTM:\t\t40'
-    print 'complex_RNN:\t128'
-    print 'ortho_tanhRHH:\t20, 64'
-    print 'uRNN:\t\t30'
-elif options['task'] == 'memory':
-    print 'tanhRNN:\t128'
-    print 'IRNN:\t\t128'
-    print 'LSTM:\t\t128'
-    print 'complex_RNN:\t512'
-    print 'uRNN:\t60'
 
 # === print stuff ===#
 print 'Created dictionary of options'
