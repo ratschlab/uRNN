@@ -6,7 +6,7 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 args<-commandArgs(TRUE)
-PLOT_TRAIN<-TRUE
+PLOT_TRAIN<-F
 
 d<-args[1]
 #d<-20
@@ -15,7 +15,9 @@ noise<-0.01
 
 #fname_base<-paste0('../output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('../output/simple/hazan_3_d', d, '_noise', noise, '_bn20_nb50000_')
-fname_base<-paste0('../output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('../output/simple/aaai/aaai_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('../output/simple/arxiv/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('../output/simple/d', d, '_noise', noise, '_bn20_nb5000_')
 #fname_base<-paste0('../output/simple/d', d, '_noise', noise, '_bn20_nb50000_')
 #fname_base<-paste0('../output/simple/lr_d', d, '_noise', noise, '_bn20_nb50000_')
@@ -36,13 +38,14 @@ print(levels(data$experiment))
 #data$experiment<-factor(data$experiment, labels=c("composition", "lie algebra", "lie algebra (basis)", "lie algebra (restricted)", "projection"))
 #data$experiment<-factor(data$experiment, labels=c("composition", "lie algebra", "lie algebra (basis)", "projection"))
 
-
-ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="right")
+### testing for now
+data <- subset(data, experiment %in% c("complex_RNN", "general_unitary", "general_unitary_restricted"))
+ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("validation set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="right") + coord_cartesian(ylim=c(0, 30))
 #+ ylim(0, 25)
 #+ ylim(0, 30) + xlim(0, 2e06)
 #+scale_colour_manual(values=gg_color_hue(5)[c(1, 2, 5)]) + scale_fill_manual(values=gg_color_hue(5)[c(1,2 , 5)])
 #$+ ylim(0, 5) + xlim(0, 1e06) + 
-ggsave(gsub(".txt", ".png", fname), width=6, height=4)
+ggsave(gsub(".txt", ".2.png", fname), width=6, height=4)
 # --- train --- # (copy pasta)
 if (PLOT_TRAIN){
     fname<-paste0(fname_base, 'train.txt')
@@ -50,8 +53,8 @@ if (PLOT_TRAIN){
     data['rep']<-NULL
 
     ggplot(data, aes(x=training_examples, y=loss, colour=experiment, group=experiment, fill=experiment)) +  ggtitle(paste0("training set loss (d=", d, ")")) + xlab("# training examples seen") + theme_bw() + stat_summary(fun.data = "mean_se", geom = "smooth")  + theme(legend.position="bottom")
-    ggsave(gsub(".txt", ".png", fname))
-    ggsave(gsub(".txt", ".pdf", fname))
+    ggsave(gsub(".txt", ".2.png", fname))
+    ggsave(gsub(".txt", ".2.pdf", fname))
 }
 
 # --- print summary statistics about test --- #
