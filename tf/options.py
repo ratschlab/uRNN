@@ -314,7 +314,7 @@ class Experiment(object):
     def set_learnable_parameters(self):
         d = self.d
         if self.restrict_parameters:
-            learnable_parameters = np.random.choice(d*d, 7*d, replace=False)
+            learnable_parameters = np.random.choice(d*d, self.restrict_parameters*d, replace=False)
             self.learnable_parameters = learnable_parameters
         else:
             self.learnable_parameters = np.arange(self.n_parameters)
@@ -340,7 +340,7 @@ def presets(d):
     general = Experiment('general_unitary', d)
     exp_list = [proj, complex_RNN, general]
     if d > 7:
-        general_restrict = Experiment('general_unitary_restricted', d, restrict_parameters=True)
+        general_restrict = Experiment('general_unitary_restricted', d, restrict_parameters=7)
         exp_list.append(general_restrict)
     return exp_list
 
@@ -375,7 +375,7 @@ def rerun(d):
     #exp_list = [proj, complex_RNN, general, general_basis_5]
     exp_list = [proj, complex_RNN, general]
     if d > 7:
-        general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=True)
+        general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=7)
         exp_list.append(general_restricted)
     return exp_list
 
