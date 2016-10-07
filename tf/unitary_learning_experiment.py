@@ -19,7 +19,7 @@ import sys
 import time
 
 from data import generate_unitary_learning, create_batches
-from unitary_np import unitary_matrix, project_to_unitary, lie_algebra_element, eigtrick_speedy
+from unitary_np import unitary_matrix, project_to_unitary, project_with_evals, lie_algebra_element, eigtrick_speedy
 from functools import partial
 from multiprocessing import Pool
 from random import sample
@@ -274,9 +274,13 @@ def train_loop(experiment, train_batches, vali_batch, pool, loginfo):
         if 'general_orthogonal' in experiment.name:
             pass
         # deyolo
-        if experiment.project:
+        # projections
+        if experiment.project == 'polar':
             # use the polar decomposition to re-unitarise the matrix
             parameters = project_to_unitary(parameters, check_unitary=False)
+        elif experiment.project == 'evals':
+            # just project eigenvalues to unit circle
+            parameters = project_with_evals(parameters)
 
     print 'Training complete!'
     return parameters

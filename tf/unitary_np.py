@@ -12,7 +12,7 @@
 import numpy as np
 import pdb
 
-from scipy.linalg import expm, polar, eigh
+from scipy.linalg import expm, polar, eigh, eig
 from scipy.fftpack import fft, ifft
 
 from functools import partial
@@ -217,6 +217,26 @@ def project_to_unitary(parameters, check_unitary=True):
         assert np.allclose(np.dot(U, np.conj(U.T)), np.eye(n))
 
     parameters = U.reshape(n*n)
+    return parameters
+
+def project_with_evals(parameters):
+    """
+    Do an eigenvalue decomposition and fix eigenvalues absolute val 1
+    """
+    # parameters must be a square number (TODO: FIRE)
+    n = int(np.sqrt(len(parameters)))
+
+    A = parameters.reshape(n, n)
+
+    w, v = eig(A)
+
+    # project w
+    w_normed = np.array([x/np.linalg.norm(x) for x in w])
+
+    # rebuild
+    A_new = np.dot(np.dot(v, np.diag(w_normed)), np.linalg.inv(v))
+    
+    parameters = A_new.reshape(n*n)
     return parameters
 
 # ===
