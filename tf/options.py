@@ -181,7 +181,7 @@ class Experiment(object):
     def __init__(self, name, d, 
                  project=False, 
                  random_projections=0,
-                 restrict_parameters=False,
+                 restrict_parameters=0,
                  theano_reflection=False,
                  change_of_basis=0,
                  real=False):
@@ -212,11 +212,12 @@ class Experiment(object):
         Make sure attributes are sensible.
         """
         if self.restrict_parameters:
-            if self.d <= 7:
-                print 'WARNING: d is <= 7, but restrict parameters is true. Setting false.'
+            if self.d <= self.restrict_parameters:
+                print 'WARNING: d is less than the factor for restricting parameters. Ignoring this setting.'
+                self.restrict_parameters = False
             if not 'general' in self.name:
                 print 'WARNING: restrict_parameters is only implemented for general unitary/orthogonal experiments. Setting false.'
-            self.restrict_parameters = False
+                self.restrict_parameters = False
 
         if self.theano_reflection and not self.name == 'complex_RNN_vanilla':
             raise ValueError(self.name, self.theano_reflection)
