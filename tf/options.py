@@ -179,7 +179,7 @@ class Experiment(object):
     Defines an experimental setting.
     """
     def __init__(self, name, d, 
-                 project=False, 
+                 project='', 
                  random_projections=0,
                  restrict_parameters=0,
                  theano_reflection=False,
@@ -335,7 +335,7 @@ def presets(d):
     """
     Returns a list of 'preset' experiment objects.
     """
-    proj = Experiment('projection', d, project=True)
+    proj = Experiment('projection', d, project='polar')
     complex_RNN = Experiment('complex_RNN', d)
     general = Experiment('general_unitary', d)
     exp_list = [proj, complex_RNN, general]
@@ -368,7 +368,7 @@ def rerun(d):
     """
     Steph is silly.
     """
-    proj = Experiment('projection', d, project=True)
+    proj = Experiment('projection', d, project='polar')
     complex_RNN = Experiment('complex_RNN', d)
     general = Experiment('general_unitary', d)
 #    general_basis_5 = Experiment('general_unitary_basis5', d, change_of_basis=5)
@@ -405,8 +405,8 @@ def basis_test(d):
 # === more experiments 1/6/16 === #
 def test_orth(d):
     """ testing new features """
-    proj_real = Experiment('projection_orthogonal', d, project=True, real=True)
-    proj_complex = Experiment('projection_unitary', d, project=True)
+    proj_real = Experiment('projection_orthogonal', d, project='polar', real=True)
+    proj_complex = Experiment('projection_unitary', d, project='polar')
     general_unitary = Experiment('general_unitary', d)
     general_orthogonal = Experiment('general_orthogonal', d, real=True)
     exp_list = [proj_real, proj_complex, general_unitary, general_orthogonal]
@@ -419,10 +419,22 @@ def hazan(d):
 #    h_imag = Experiment('hazan_imag', d, project=False, real=False)
     general_unitary = Experiment('general_unitary', d)
     complex_RNN = Experiment('complex_RNN', d)
-    proj_real = Experiment('projection_orthogonal', d, project=True, real=True)
+    proj_real = Experiment('projection_orthogonal', d, project='polar', real=True)
 #    general_orthogonal = Experiment('general_orthogonal', d, real=True)
     exp_list = [h_real, general_unitary, proj_real]
     for e in exp_list:
         if 'hazan' in e.name:
             e.learning_rate = lr
+    return exp_list
+
+# === compare projections === #
+def project_compare(d):
+    proj_polar = Experiment('projection_polar', d, project='polar')
+    proj_evals = Experiment('projection_evals', d, project='evals')
+    complex_RNN = Experiment('complex_RNN', d)
+    general = Experiment('general_unitary', d)
+    exp_list = [proj_polar, proj_evals, complex_RNN, general]
+    if d > 7:
+        general_restricted = Experiment('general_unitary_restricted', d, restrict_parameters=7)
+        exp_list.append(general_restricted)
     return exp_list
