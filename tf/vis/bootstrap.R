@@ -7,7 +7,8 @@ d<-args[1]
 noise<-0.01
 
 #fname_base<-paste0('../output/simple/l2/d', d, '_noise', noise, '_bn20_nb50000_')
-fname_base<-paste0('../output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
+#fname_base<-paste0('../output/simple/projection_test_d', d, '_noise', noise, '_bn20_nb50000_')
+fname_base<-paste0('../output/simple/aaai_d', d, '_noise', noise, '_bn20_nb50000_')
 print(fname_base)
 
 # --- print summary statistics about test --- #
