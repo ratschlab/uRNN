@@ -252,10 +252,10 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
     if SAVE_INTERNAL_GRADS:
         hidden_gradients_path = 'output/' + task + '/' + mname + '.hidden_gradients.txt'
         hidden_gradients_file = open(hidden_gradients_path, 'w')
-        hidden_gradients_file.write('batch k norm\n')
+        hidden_gradients_file.write('epoch batch k norm\n')
         hidden_states_path = 'output/' + task + '/' + mname + '.hidden_states.txt'
         hidden_states_file = open(hidden_states_path, 'w')
-        hidden_states_file.write('batch k value what\n')
+        hidden_states_file.write('epoch batch k value what\n')
 
     if TIMING:
         timing_path = 'output/' + task + '/' + mname + '.timing.txt'
@@ -431,7 +431,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
                 # calculate gradients of cost with respect to internal states
                 # save the mean (over the batch) norms of these
-                if SAVE_INTERNAL_GRADS and (batch_index in {0, 100, 500}):
+                if SAVE_INTERNAL_GRADS and batch_index % 500 == 0:
                     print 'calculating internal gradients...'
                     internal_grads_np = session.run(internal_grads, {x:batch_x, y:batch_y})
                     print 'calculating internal states...'
@@ -439,7 +439,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                     # get norms of each gradient vector, then average over the batch
                     for (k, grad_at_k) in enumerate(internal_grads_np):
                         norm_at_k = np.mean(np.linalg.norm(grad_at_k, axis=1))
-                        hidden_gradients_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(norm_at_k) + '\n')
+                        hidden_gradients_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(k) + ' ' + str(norm_at_k) + '\n')
                     # this is actually batch_size final states...
                     final_state = internal_states_np[-1]
                     for (k, state_batch) in enumerate(internal_states_np):
@@ -447,12 +447,12 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                         mean_norm = np.mean(np.linalg.norm(state_batch, axis=1))
                         # get the norm of the difference, then average over the batch
                         mean_diff_norm = np.mean(np.linalg.norm(diff, axis=1))
-                        hidden_states_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(mean_diff_norm) + ' diff\n')
-                        hidden_states_file.write(str(batch_index) + ' ' + str(k) + ' ' + str(mean_norm) + ' norm\n')
+                        hidden_states_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(k) + ' ' + str(mean_diff_norm) + ' diff\n')
+                        hidden_states_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(k) + ' ' + str(mean_norm) + ' norm\n')
                     hidden_gradients_file.flush()
                     hidden_states_file.flush()
-                    if batch_index == 500:
-                        sys.exit('finished recording hidden state info')
+#                    if batch_index == 500:
+#                        sys.exit('finished recording hidden state info')
 
         print 'Training completed.'
         if DO_TEST:
