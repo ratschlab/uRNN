@@ -718,8 +718,9 @@ class uRNNCell(steph_RNNCell):
             # identity
             #new_state = tf.identity(intermediate_state, name='new_state')
             #new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
-            new_state = tf.nn.tanh(intermediate_state, name='new_state')
-            #new_state = tf.nn.relu(intermediate_state, name='new_state')
+            #new_state = tf.nn.tanh(intermediate_state, name='new_state')
+            new_state = tf.nn.relu(intermediate_state, name='new_state')
+            #new_state = tf.nn.sigmoid(intermediate_state, name='new_state')
             #new_state = tf.maximum(0.1*intermediate_state, intermediate_state, name='new_state')       # ... leaky relu
             #new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True, name='new_state')
 
