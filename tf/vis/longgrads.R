@@ -4,16 +4,27 @@ library(ggplot2)
 library(tidyr)
 
 GET_EPOCHS<-FALSE
+#GET_EPOCHS<-TRUE
 
 #base_dir <- "/Users/stephanie/PhD/git/complex_RNN/tf/output/memory/"
 base_dir <- "/Users/stephanie/PhD/git/complex_RNN/tf/output/adding/"
 
-#base_name <- 'longgrads_LSTM_T100_n40'
-#base_name <- 'gradtestlong_relu_uRNN_T100_n30'
-base_name <- 'longgrads_IRNN_T100_n80'
+# mem
 #base_name <- 'gradtestlong_tanh_uRNN_T100_n30'
 #base_name <- 'longgrads_complex_RNN_T100_n128'
 #base_name <- 'longgrads_LSTM_T100_n128'
+#base_name <- 'longgrads_2_LSTM_T100_n40'
+
+# add
+#base_name <- 'gradtestlong_relu_uRNN_T100_n30'
+base_name <- 'longgrads-relu-2_uRNN_T100_n30'
+#base_name <- 'longgrads_complex_RNN_T100_n512'
+#base_name <- 'longgrads_LSTM_T100_n40'
+#base_name <- 'leakyrelu-gradtest_uRNN_T100_n30'
+
+
+#base_name <- 'longgrads_IRNN_T100_n80'
+#base_name <- 'longgrads_2_IRNN_T100_n80'
 
 fname<-paste0(base_dir, base_name)
 #fname<-paste0(base_dir, 'longgrads_complex_RNN_T100_n512')
@@ -78,7 +89,8 @@ da<-data.frame(da, which)
 # --- now for plot --- #
 
 # this is the averaging one
-#ggplot(da, aes(x=update, y=val, group=which, colour=which)) + stat_summary(geom="smooth", fun.data="mean_cl_boot") + xlab("number of training updates") + theme_bw()  + facet_grid(which~., scale="free") + ggtitle(base_name) + coord_cartesian(ylim=c(0, 1))
+#ggplot(da, aes(x=update, y=val, group=which, colour=which)) + stat_summary(geom="smooth", fun.data="mean_cl_boot") + xlab("number of training updates") + theme_bw()  + facet_grid(which~., scale="free") + ggtitle(base_name)
+#+ coord_cartesian(ylim=c(0, 1))
 #ggsave(paste0(fname, ".longgrads.png"), width=4.5, height=3)
 
 # now for the difference one
@@ -94,6 +106,31 @@ daa_2<-rbind(daa, da_2)
 which<-c(rep("grad", nrow(daa)), rep("vali", nrow(da_2)))
 daa_2<-data.frame(daa_2, which)
 
-ggplot(daa_2, aes(x=update, y=val, group=which, colour=which)) + geom_point(cex=0.7) + geom_line(alpha=0.2) + xlab("number of training updates") + theme_bw()  + ggtitle(base_name) + facet_grid(which~., scales="free") + ylab("grad: diff btw 1 & 119 state grad")
+#ggplot(daa_2, aes(x=update, y=val, group=which, colour=which)) + geom_point(cex=0.7) + geom_line(alpha=0.2) + xlab("number of training updates") + theme_bw()  + ggtitle(base_name) + facet_grid(which~., scales="free") + ylab("grad: diff btw 1 & 119 state grad")
 #+ coord_cartesian(ylim=c(-0.5, 0.5))
-ggsave(paste0(fname, ".diff.longgrads.png"), width=4.5, height=3)
+#ggsave(paste0(fname, ".diff.longgrads.png"), width=4.5, height=3)
+
+
+# --- instead of difference, let's get the slope of the log plot --- #
+# just need updates, k, and norm
+da_slope <- da_grads[, c(1, 4, 5)]
+# uh < - lm(log(norm) ~ k, data=dd)
+# summary(uh)$coefficients[1,1]
+# summary(uh)$adj.r.squared
+fits <- by(da_slope, da_slope$updates, function(x) lm(log(norm) ~ k, data=x))
+slopes <- sapply(fits, function(x) summary(x)$coefficients[1, 1])
+r_sq <- sapply(fits, function(x) summary(x)$adj.r.squared)
+
+updates<-c(rep(as.numeric(names(fits)), 2), da_vali$updates, da_grads$updates)
+what<-c(rep("slope", length(fits)), rep("rsq", length(fits)), rep("vali", nrow(da_vali)), rep("grad norm", nrow(da_grads)))
+val<-c(slopes, r_sq, da_vali$vali_cost, da_grads$norm)
+plot_da <- data.frame(updates, what, val)
+
+# prune absurd values
+#IRNN
+# on vali
+plot_da <- subset(plot_da, (what!="vali")|((what=="vali")&(val<0.3)))
+
+
+ggplot(plot_da, aes(x=updates, y=val, group=what, colour=what)) + geom_point(cex=0.5) + geom_line(alpha=0.8) + facet_grid(what~., scales="free") + ggtitle(base_name) + theme_bw()
+ggsave(paste0(fname, ".all.longgrads.png"), width=5, height=5)
