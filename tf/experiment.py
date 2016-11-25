@@ -318,7 +318,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.95
+    config.gpu_options.per_process_gpu_memory_fraction = 0.5
 
     # === let's do it! === #
     if verbose: print 'initialising session...'
@@ -497,24 +497,24 @@ else:
 T = options['T']
 if options['task'] == 'adding':
     if T == 100:
-        options['data_path'] = 'input/adding/1470744790_100.pk'
+        options['data_path'] = 'input/adding/100000_10000_1479996206_100.pk'
     elif T == 200:
-        options['data_path'] = 'input/adding/1470744860_200.pk'
+        options['data_path'] = ''
     elif T == 400:
-        options['data_path'] = 'input/adding/1470744994_400.pk'
+        options['data_path'] = ''
     elif T == 750:
-        options['data_path'] = 'input/adding/1470745056_750.pk'
+        options['data_path'] = ''
     else:
         options['data_path'] = ''
 elif options['task'] == 'memory':
     if T == 100:
-        options['data_path'] = 'input/memory/1472550931_100.pk'
+        options['data_path'] = 'input/memory/100000_10000_1479996618_100.pk'
     elif T == 200:
-        options['data_path'] = 'input/memory/1470767064_200.pk'
+        options['data_path'] = ''
     elif T == 300:
-        options['data_path'] = 'input/memory/1470767409_300.pk'
+        options['data_path'] = ''
     elif T == 500:
-        options['data_path'] = 'input/memory/1470767936_500.pk'
+        options['data_path'] = ''
     else:
         options['data_path'] = ''
 elif options['task'] == 'mnist':
