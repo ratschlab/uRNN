@@ -713,13 +713,14 @@ class uRNNCell(steph_RNNCell):
 
 #            Ustate_re = linear(state_re, hidden_size, bias=True, scope='Unitary/Transition/Real', init_val=self._init_re)
 #            Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
-
+    
+            BETA = 1.1      # accounting for the effects of the nonlinearity (EXPERIMENTAL)
             Ustate_re, Ustate_im = linear_complex(state_re, state_im, hidden_size, bias=False, scope='Unitary/Transition', init_val_re=self._init_re, init_val_im=self._init_im)
 #                    Ustate_im = linear(state_im, hidden_size, bias=True, scope='Unitary/Transition/Imaginary', init_val=self._init_im)
             foldin_re = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Real')
             foldin_im = linear(inputs, hidden_size, bias=True, scope='Linear/FoldIn/Imaginary')
-            intermediate_re = foldin_re + Ustate_re
-            intermediate_im = foldin_im + Ustate_im
+            intermediate_re = foldin_re + BETA*Ustate_re
+            intermediate_im = foldin_im + BETA*Ustate_im
 
             intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
           
