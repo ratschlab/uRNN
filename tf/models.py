@@ -654,10 +654,18 @@ class complex_RNNCell(steph_RNNCell):
 #                intermediate_state = tf.concat(1, [intermediate_re, intermediate_im])
 #                new_state_real = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True)
                 
-                new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', name='new_state')
+                new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', name='new_state')     # DEFAULT
+                #new_state = tf.nn.relu(intermediate_state, name='new_state')
+                #new_state = tf.nn.tanh(intermediate_state, name='new_state')
+                #new_state = tf.identity(intermediate_state, name='new_state')
+                #new_state = tf.maximum(0.1*intermediate_state, intermediate_state, name='new_state')       # ... leaky relu
 #                new_state = intermediate_state
+           
+            # taken from uRNN
+            #new_state = tanh_mod(intermediate_re, intermediate_im, scope='tanh_mod', name='new_state')
+            #new_state = tf.nn.sigmoid(intermediate_state, name='new_state')
+            #new_state = relu_mod(intermediate_state, self._state_size, scope='ReLU_mod', real=True, name='new_state')
 
-                
                 real_state = tf.concat(1, [tf.real(new_state), tf.imag(new_state)])
                 output = linear(real_state, self._output_size, bias=True, scope='Linear/Output')
 #                output = linear(new_state_real, self._output_size, bias=True, scope='Linear/Output')
