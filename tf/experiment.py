@@ -30,8 +30,8 @@ import cProfile
 # === some bools === #
 
 DO_TEST = False
-SAVE_INTERNAL_GRADS = True
-#SAVE_INTERNAL_GRADS = False
+#SAVE_INTERNAL_GRADS = True
+SAVE_INTERNAL_GRADS = False
 #TIMING = False              # record time between batches
 TIMING = True                # record time between batches
 
@@ -318,7 +318,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
 
     # === gpu stuff === #
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.5
+    config.gpu_options.per_process_gpu_memory_fraction = 0.9
 
     # === let's do it! === #
     if verbose: print 'initialising session...'
@@ -422,6 +422,7 @@ def run_experiment(task, batch_size, state_size, T, model, data_path,
                             t_prev = time()
                         t = time()
                         dt = t - t_prev
+                        print 'dt:', dt
                         timing_file.write(str(epoch) + ' ' + str(batch_index) + ' ' + str(dt) +'\n')
                         timing_file.flush()
                         t_prev = t
